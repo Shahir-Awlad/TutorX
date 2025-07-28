@@ -158,6 +158,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8f9fa',
   },
   header: {
+    paddingTop: Platform.OS === 'web' ? StatusBar.currentHeight : 60,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
