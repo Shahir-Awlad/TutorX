@@ -21,6 +21,7 @@ import {
 } from 'firebase/firestore';
 import { auth, db } from '../firebaseConfig';
 import { useAuth } from '../contexts/AuthContext';
+import { StatusBar } from 'expo-status-bar';
 
 const ChatScreen = () => {
   const [message, setMessage] = useState('');
@@ -106,7 +107,9 @@ const ChatScreen = () => {
   };
 
   return (
+    
     <SafeAreaView style={styles.container}>
+      <StatusBar style="light" backgroundColor="#007bff" />
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Chat Room</Text>
         <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
@@ -125,8 +128,7 @@ const ChatScreen = () => {
       />
       
       <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+        behavior="padding"
       >
         <View style={styles.inputContainer}>
           <TextInput
