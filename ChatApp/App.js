@@ -6,7 +6,9 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 import LoginScreen from './screens/LoginScreen';
 import SignUpScreen from './screens/SignUpScreen';
-import ChatScreen from './screens/ChatScreen';
+import ConversationsScreen from './screens/ConversationsScreen';
+import DirectChatScreen from './screens/DirectChatScreen';
+import UserSearchScreen from './screens/UserSearchScreen';
 
 const Stack = createStackNavigator();
 
@@ -21,7 +23,11 @@ const AppNavigator = () => {
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {user ? (
-          <Stack.Screen name="Chat" component={ChatScreen} />
+          <>
+            <Stack.Screen name="Conversations" component={ConversationsScreen} />
+            <Stack.Screen name="DirectChat" component={DirectChatScreen} />
+            <Stack.Screen name="UserSearch" component={UserSearchScreen} />
+          </>
         ) : (
           <>
             <Stack.Screen name="Login" component={LoginScreen} />
