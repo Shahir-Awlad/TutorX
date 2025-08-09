@@ -32,6 +32,11 @@ const DirectChatScreen = ({ route, navigation }) => {
   const flatListRef = useRef();
 
   useEffect(() => {
+    // Don't set up listener if user is null
+    if (!user?.uid) {
+      return;
+    }
+
     // Set navigation title
     navigation.setOptions({
       title: otherUser.displayName || otherUser.email
@@ -50,13 +55,15 @@ const DirectChatScreen = ({ route, navigation }) => {
         });
       });
       setMessages(messagesData);
+    }, (error) => {
+      console.error('Error fetching messages:', error);
     });
 
     return unsubscribe;
-  }, [conversationId, otherUser]);
+  }, [conversationId, otherUser, user?.uid]);
 
   const sendMessage = async () => {
-    if (message.trim() === '') return;
+    if (message.trim() === '' || !user?.uid) return;
 
     const messageText = message.trim();
     setMessage('');
@@ -114,6 +121,8 @@ const DirectChatScreen = ({ route, navigation }) => {
   );
 
   const renderMessage = ({ item, index }) => {
+    if (!user?.uid) return null;
+    
     const isMyMessage = item.senderId === user.uid;
     const nextMessage = messages[index - 1];
     const showDate = !nextMessage || 

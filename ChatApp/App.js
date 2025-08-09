@@ -21,7 +21,11 @@ const AppNavigator = () => {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator 
+        screenOptions={{ headerShown: false }}
+        // Reset the stack when authentication state changes
+        key={user ? 'authenticated' : 'unauthenticated'}
+      >
         {user ? (
           <>
             <Stack.Screen name="Conversations" component={ConversationsScreen} />

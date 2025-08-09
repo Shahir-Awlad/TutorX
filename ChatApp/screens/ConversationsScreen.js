@@ -25,20 +25,19 @@ const ConversationsScreen = ({ navigation }) => {
   const { user } = useAuth();
 
   useEffect(() => {
-    // First, try the query with orderBy (requires index)
-    const qWithOrder = query(
-      collection(db, 'conversations'),
-      where('participants', 'array-contains', user.uid),
-      orderBy('lastMessageTime', 'desc')
-    );
-    
-    // Fallback query without orderBy (in case index doesn't exist yet)
-    const qWithoutOrder = query(
+    // Don't set up listener if user is null
+    if (!user?.uid) {
+      setConversations([]);
+      return;
+    }
+
+    // Simple query without orderBy to avoid index requirement
+    const q = query(
       collection(db, 'conversations'),
       where('participants', 'array-contains', user.uid)
     );
     
-    const unsubscribe = onSnapshot(qWithOrder, (querySnapshot) => {
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const conversationsData = [];
       querySnapshot.forEach((doc) => {
         const data = doc.data();
@@ -58,57 +57,31 @@ const ConversationsScreen = ({ navigation }) => {
         }
       });
       
-      // Sort manually if needed (in case we're using the fallback query)
+      // Sort manually by lastMessageTime (most recent first)
       conversationsData.sort((a, b) => {
+        // Handle conversations without messages
         if (!a.lastMessageTime && !b.lastMessageTime) return 0;
         if (!a.lastMessageTime) return 1;
         if (!b.lastMessageTime) return -1;
-        return b.lastMessageTime.seconds - a.lastMessageTime.seconds;
+        
+        // Compare timestamps
+        const aTime = a.lastMessageTime.seconds || 0;
+        const bTime = b.lastMessageTime.seconds || 0;
+        return bTime - aTime;
       });
       
       setConversations(conversationsData);
     }, (error) => {
-      console.error('Error with ordered query, trying fallback:', error);
-      
-      // Try fallback query without orderBy
-      const fallbackUnsubscribe = onSnapshot(qWithoutOrder, (querySnapshot) => {
-        const conversationsData = [];
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          const otherParticipantId = data.participants.find(id => id !== user.uid);
-          const otherParticipant = data.participantDetails?.[otherParticipantId];
-          
-          if (otherParticipant) {
-            conversationsData.push({
-              id: doc.id,
-              ...data,
-              otherParticipant: {
-                id: otherParticipantId,
-                ...otherParticipant
-              }
-            });
-          }
-        });
-        
-        // Sort manually
-        conversationsData.sort((a, b) => {
-          if (!a.lastMessageTime && !b.lastMessageTime) return 0;
-          if (!a.lastMessageTime) return 1;
-          if (!b.lastMessageTime) return -1;
-          return b.lastMessageTime.seconds - a.lastMessageTime.seconds;
-        });
-        
-        setConversations(conversationsData);
-      });
-      
-      return fallbackUnsubscribe;
+      console.error('Error fetching conversations:', error);
     });
 
     return unsubscribe;
-  }, [user.uid]);
+  }, [user?.uid]);
 
   const handleLogout = async () => {
     try {
+      // Clear conversations first to prevent any lingering listeners
+      setConversations([]);
       await signOut(auth);
     } catch (error) {
       console.error('Logout error:', error);
