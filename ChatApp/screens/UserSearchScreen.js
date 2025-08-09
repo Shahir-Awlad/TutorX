@@ -88,7 +88,8 @@ const UserSearchScreen = ({ navigation }) => {
       const conversationSnap = await getDoc(conversationRef);
       
       if (!conversationSnap.exists()) {
-        // Create new conversation
+        // Create new conversation with current timestamp
+        const currentTime = new Date();
         await setDoc(conversationRef, {
           participants: [user.uid, selectedUser.id],
           participantDetails: {
@@ -101,9 +102,9 @@ const UserSearchScreen = ({ navigation }) => {
               email: selectedUser.email
             }
           },
-          createdAt: serverTimestamp(),
-          lastMessage: null,
-          lastMessageTime: null,
+          createdAt: currentTime,
+          lastMessage: '',
+          lastMessageTime: currentTime,
         });
       }
 
@@ -114,7 +115,8 @@ const UserSearchScreen = ({ navigation }) => {
       });
     } catch (error) {
       console.error('Error starting conversation:', error);
-      Alert.alert('Error', 'Failed to start conversation');
+      console.error('Error details:', error.code, error.message);
+      Alert.alert('Error', `Failed to start conversation: ${error.message}`);
     }
   };
 

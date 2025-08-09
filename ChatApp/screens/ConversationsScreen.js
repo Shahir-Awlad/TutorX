@@ -25,30 +25,83 @@ const ConversationsScreen = ({ navigation }) => {
   const { user } = useAuth();
 
   useEffect(() => {
-    const q = query(
+    // First, try the query with orderBy (requires index)
+    const qWithOrder = query(
       collection(db, 'conversations'),
       where('participants', 'array-contains', user.uid),
       orderBy('lastMessageTime', 'desc')
     );
     
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+    // Fallback query without orderBy (in case index doesn't exist yet)
+    const qWithoutOrder = query(
+      collection(db, 'conversations'),
+      where('participants', 'array-contains', user.uid)
+    );
+    
+    const unsubscribe = onSnapshot(qWithOrder, (querySnapshot) => {
       const conversationsData = [];
       querySnapshot.forEach((doc) => {
         const data = doc.data();
         // Get the other participant's details
         const otherParticipantId = data.participants.find(id => id !== user.uid);
-        const otherParticipant = data.participantDetails[otherParticipantId];
+        const otherParticipant = data.participantDetails?.[otherParticipantId];
         
-        conversationsData.push({
-          id: doc.id,
-          ...data,
-          otherParticipant: {
-            id: otherParticipantId,
-            ...otherParticipant
+        if (otherParticipant) {
+          conversationsData.push({
+            id: doc.id,
+            ...data,
+            otherParticipant: {
+              id: otherParticipantId,
+              ...otherParticipant
+            }
+          });
+        }
+      });
+      
+      // Sort manually if needed (in case we're using the fallback query)
+      conversationsData.sort((a, b) => {
+        if (!a.lastMessageTime && !b.lastMessageTime) return 0;
+        if (!a.lastMessageTime) return 1;
+        if (!b.lastMessageTime) return -1;
+        return b.lastMessageTime.seconds - a.lastMessageTime.seconds;
+      });
+      
+      setConversations(conversationsData);
+    }, (error) => {
+      console.error('Error with ordered query, trying fallback:', error);
+      
+      // Try fallback query without orderBy
+      const fallbackUnsubscribe = onSnapshot(qWithoutOrder, (querySnapshot) => {
+        const conversationsData = [];
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          const otherParticipantId = data.participants.find(id => id !== user.uid);
+          const otherParticipant = data.participantDetails?.[otherParticipantId];
+          
+          if (otherParticipant) {
+            conversationsData.push({
+              id: doc.id,
+              ...data,
+              otherParticipant: {
+                id: otherParticipantId,
+                ...otherParticipant
+              }
+            });
           }
         });
+        
+        // Sort manually
+        conversationsData.sort((a, b) => {
+          if (!a.lastMessageTime && !b.lastMessageTime) return 0;
+          if (!a.lastMessageTime) return 1;
+          if (!b.lastMessageTime) return -1;
+          return b.lastMessageTime.seconds - a.lastMessageTime.seconds;
+        });
+        
+        setConversations(conversationsData);
       });
-      setConversations(conversationsData);
+      
+      return fallbackUnsubscribe;
     });
 
     return unsubscribe;
