@@ -4,213 +4,364 @@ import {
   Text,
   StyleSheet,
   Image,
+  SafeAreaView,
   TextInput,
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
-  ScrollView
+  ScrollView,
+  StatusBar,
+  Dimensions,
+  Alert
 } from 'react-native';
-import { getDoc, doc } from 'firebase/firestore';
-import { auth, firestore } from '../../firebaseConfig';
-import { Feather } from '@expo/vector-icons';
+import { getDoc, doc, updateDoc, query, collection, where, getDocs } from 'firebase/firestore';
+import { useNavigation } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
+import { db } from '../../firebaseConfig';
+
+const { width, height } = Dimensions.get('window');
 
 export default function Profile() {
   const [userData, setUserData] = useState({
-    username: '',
+    username: 'sameen4',
     email: '',
     phoneNumber: '',
     nationality: '',
-    profileImage: null,
+    imageUrl: null,
+    type: '',
   });
 
-  const [editMode, setEditMode] = useState({
-    phoneNumber: false,
-    nationality: false,
-  });
+  const [editingField, setEditingField] = useState(null);
+  const [tempValue, setTempValue] = useState('');
+
+  // Error states
+  const [phoneError, setPhoneError] = useState('');
+  const [nationalityError, setNationalityError] = useState('');
+
+  const navigation = useNavigation();
+
+  // Load user data from Firestore
+  const loadUserData = async () => {
+    try {
+      const q = query(collection(db, 'Users'), where('username', '==', userData.username));
+      const querySnapshot = await getDocs(q);
+      
+      if (!querySnapshot.empty) {
+        const userDoc = querySnapshot.docs[0];
+        const data = userDoc.data();
+        
+        // Set data with appropriate placeholders for null values
+        setUserData({
+          username: data.username || '',
+          email: data.email || '',
+          phoneNumber: data.phoneNumber || null,
+          nationality: data.nationality || null,
+          imageUrl: data.imageUrl || null,
+          type: data.type || '',
+          userId: userDoc.id, // Store document ID for updates
+        });
+      } else {
+        Alert.alert('Error', 'User not found');
+      }
+    } catch (error) {
+      console.error('Error loading user data:', error);
+      Alert.alert('Error', 'Failed to load profile data');
+    }
+  };
+
+  // Save changes to Firestore
+  const handleSaveChanges = async () => {
+    setPhoneError('');
+    setNationalityError('');
+
+    if (!tempValue.trim()) {
+      if (editingField === 'phoneNumber') setPhoneError('Phone number cannot be empty');
+      if (editingField === 'nationality') setNationalityError('Nationality cannot be empty');
+      return;
+    }
+
+    try {
+      if (userData.userId) {
+        await updateDoc(doc(db, 'Users', userData.userId), {
+          [editingField]: tempValue.trim()
+        });
+
+        setUserData(prev => ({
+          ...prev,
+          [editingField]: tempValue.trim()
+        }));
+
+        setEditingField(null);
+        setTempValue('');
+        Alert.alert('Success', 'Profile updated successfully!');
+      }
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      Alert.alert('Error', 'Failed to update profile');
+    }
+  };
+
+  // Start editing a field
+  const handleStartEditing = (field, currentValue) => {
+    if (field === 'email') {
+      Alert.alert('Info', 'Email cannot be edited as it\'s used for authentication');
+      return;
+    }
+    setEditingField(field);
+    setTempValue(currentValue || '');
+    setPhoneError('');
+    setNationalityError('');
+  };
+
+  // Cancel editing
+  const handleCancelEditing = () => {
+    setEditingField(null);
+    setTempValue('');
+    setPhoneError('');
+    setNationalityError('');
+  };
 
   useEffect(() => {
-    const fetchUserData = async () => {
-      const uid = auth.currentUser.uid;
-      const docRef = doc(firestore, 'Users', uid);
-      const docSnap = await getDoc(docRef);
-
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setUserData({
-          username: data.username,
-          email: data.email,
-          phoneNumber: data.phoneNumber || '',
-          nationality: data.nationality || '',
-          profileImage: data.profileImageUrl || null,
-        });
-      }
-    };
-
-    fetchUserData();
+    loadUserData();
   }, []);
 
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
     >
-      <ScrollView contentContainerStyle={styles.container}>
-        {/* Decorative Circles */}
-        <View style={styles.backgroundCircleLarge} />
-        <View style={styles.backgroundCircleSmall} />
-
-        {/* Profile Image */}
-        <View style={styles.profileImageContainer}>
-          <Image
-            source={
-              userData.profileImage
-                ? { uri: userData.profileImage }
-                : require('../../assets/default_user.jpg')
-            }
-            style={styles.profileImage}
-          />
-          <Text style={styles.username}>{userData.username}</Text>
-        </View>
-
-        {/* Profile Details */}
-        <View style={styles.detailsContainer}>
-
-          {/* Email (non-editable) */}
-          <View style={styles.detailRow}>
-            <Text style={styles.label}>Email</Text>
-            <Text style={styles.detailValue}>{userData.email}</Text>
-            <Feather name="edit-2" size={16} color="#ccc" style={styles.editIcon} />
-          </View>
-
-          {/* Phone Number */}
-          <View style={styles.detailRow}>
-            <Text style={styles.label}>Phone Number</Text>
-            {editMode.phoneNumber ? (
-              <TextInput
-                style={styles.input}
-                value={userData.phoneNumber}
-                onChangeText={(text) =>
-                  setUserData((prev) => ({ ...prev, phoneNumber: text }))
+      <ScrollView
+        contentContainerStyle={{ flexGrow: 1 }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <SafeAreaView style={styles.safeArea}>
+          <StatusBar barStyle="light-content" backgroundColor="#000" />
+          
+          {/* Header with decorative elements */}
+          <View style={styles.headerContainer}>
+            <View style={styles.decorativeCircleLarge} />
+            <View style={styles.decorativeCircleSmall} />
+            
+            {/* Profile Image */}
+            <View style={styles.profileImageContainer}>
+              <Image
+                source={
+                  userData.imageUrl
+                    ? { uri: userData.imageUrl }
+                    : require('../../assets/default_user.jpg') // Add this to your assets
                 }
+                style={styles.profileImage}
+                onError={() => {
+                  setUserData(prev => ({ ...prev, imageUrl: null }));
+                }}
               />
-            ) : (
-              <Text style={styles.detailValue}>{userData.phoneNumber}</Text>
-            )}
-            <TouchableOpacity
-              onPress={() =>
-                setEditMode((prev) => ({
-                  ...prev,
-                  phoneNumber: !prev.phoneNumber,
-                }))
-              }
-            >
-              <Feather name="edit-2" size={16} color="white" style={styles.editIcon} />
-            </TouchableOpacity>
+            </View>
+            
+            {/* Username */}
+            <Text style={styles.username}>{userData.username || 'No Username'}</Text>
+            <Text style={styles.userType}>{userData.type || 'User'}</Text>
           </View>
 
-          {/* Nationality */}
-          <View style={styles.detailRow}>
-            <Text style={styles.label}>Nationality</Text>
-            {editMode.nationality ? (
-              <TextInput
-                style={styles.input}
-                value={userData.nationality}
-                onChangeText={(text) =>
-                  setUserData((prev) => ({ ...prev, nationality: text }))
-                }
-              />
-            ) : (
-              <Text style={styles.detailValue}>{userData.nationality}</Text>
-            )}
-            <TouchableOpacity
-              onPress={() =>
-                setEditMode((prev) => ({
-                  ...prev,
-                  nationality: !prev.nationality,
-                }))
-              }
-            >
-              <Feather name="edit-2" size={16} color="white" style={styles.editIcon} />
-            </TouchableOpacity>
-          </View>
+          {/* Profile Fields */}
+          <View style={styles.fieldsContainer}>
+            
+            {/* Email Field */}
+            <Text style={styles.fieldLabel}>Email</Text>
+            <View style={styles.inputBox}>
+              <Ionicons name="mail" size={18} color="#666" style={styles.icon} />
+              <Text style={styles.fieldText}>{userData.email || 'No email'}</Text>
+              <TouchableOpacity onPress={() => handleStartEditing('email', userData.email)}>
+                <Ionicons name="create-outline" size={18} color="#666" style={styles.icon} />
+              </TouchableOpacity>
+            </View>
 
-        </View>
+            {/* Phone Number Field */}
+            <Text style={styles.fieldLabel}>Phone Number</Text>
+            {editingField === 'phoneNumber' ? (
+              <View>
+                <View style={styles.inputBox}>
+                  <Ionicons name="call" size={18} color="black" style={styles.icon} />
+                  <TextInput
+                    placeholder="Enter phone number"
+                    value={tempValue}
+                    onChangeText={setTempValue}
+                    style={styles.input}
+                    keyboardType="phone-pad"
+                    placeholderTextColor="#333"
+                    autoFocus
+                  />
+                  <TouchableOpacity onPress={handleSaveChanges} style={styles.actionButton}>
+                    <Ionicons name="checkmark" size={18} color="#4CAF50" />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={handleCancelEditing} style={styles.actionButton}>
+                    <Ionicons name="close" size={18} color="#f44336" />
+                  </TouchableOpacity>
+                </View>
+                {phoneError ? (
+                  <Text style={styles.errorText}>{phoneError}</Text>
+                ) : null}
+              </View>
+            ) : (
+              <View style={styles.inputBox}>
+                <Ionicons name="call" size={18} color="#666" style={styles.icon} />
+                <Text style={styles.fieldText}>
+                  {userData.phoneNumber || 'Add phone number'}
+                </Text>
+                <TouchableOpacity onPress={() => handleStartEditing('phoneNumber', userData.phoneNumber)}>
+                  <Ionicons name="create-outline" size={18} color="#666" style={styles.icon} />
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Nationality Field */}
+            <Text style={styles.fieldLabel}>Nationality</Text>
+            {editingField === 'nationality' ? (
+              <View>
+                <View style={styles.inputBox}>
+                  <Ionicons name="flag" size={18} color="black" style={styles.icon} />
+                  <TextInput
+                    placeholder="Enter nationality"
+                    value={tempValue}
+                    onChangeText={setTempValue}
+                    style={styles.input}
+                    placeholderTextColor="#333"
+                    autoFocus
+                  />
+                  <TouchableOpacity onPress={handleSaveChanges} style={styles.actionButton}>
+                    <Ionicons name="checkmark" size={18} color="#4CAF50" />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={handleCancelEditing} style={styles.actionButton}>
+                    <Ionicons name="close" size={18} color="#f44336" />
+                  </TouchableOpacity>
+                </View>
+                {nationalityError ? (
+                  <Text style={styles.errorText}>{nationalityError}</Text>
+                ) : null}
+              </View>
+            ) : (
+              <View style={styles.inputBox}>
+                <Ionicons name="flag" size={18} color="#666" style={styles.icon} />
+                <Text style={styles.fieldText}>
+                  {userData.nationality || 'Add nationality'}
+                </Text>
+                <TouchableOpacity onPress={() => handleStartEditing('nationality', userData.nationality)}>
+                  <Ionicons name="create-outline" size={18} color="#666" style={styles.icon} />
+                </TouchableOpacity>
+              </View>
+            )}
+
+          </View>
+        </SafeAreaView>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flexGrow: 1,
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  headerContainer: {
+    height: height * 0.45,
+    justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#0A0E2F',
-    paddingTop: 80,
-    paddingBottom: 40,
+    position: 'relative',
+    paddingTop: 40,
   },
-  backgroundCircleLarge: {
+  decorativeCircleLarge: {
     position: 'absolute',
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    backgroundColor: '#C1FF72',
-    top: -100,
-    left: -100,
-    opacity: 0.3,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: '#333',
+    top: 80,
+    left: width * 0.15,
   },
-  backgroundCircleSmall: {
+  decorativeCircleSmall: {
     position: 'absolute',
-    width: 150,
-    height: 150,
-    borderRadius: 75,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     backgroundColor: '#C1FF72',
-    top: 0,
-    right: -50,
-    opacity: 0.2,
+    top: 50,
+    right: width * 0.2,
   },
   profileImageContainer: {
-    alignItems: 'center',
-    marginBottom: 30,
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: '#ccc',
+    overflow: 'hidden',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    marginBottom: 15,
   },
   profileImage: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 3,
-    borderColor: '#C1FF72',
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
   },
   username: {
-    marginTop: 12,
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: 'white',
+    color: '#fff',
+    marginBottom: 5,
   },
-  detailsContainer: {
-    width: '85%',
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  userType: {
+    fontSize: 16,
+    color: '#C1FF72',
     marginBottom: 20,
   },
-  label: {
-    flex: 1.2,
-    color: '#ccc',
-    fontSize: 16,
+  fieldsContainer: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingBottom: 30,
   },
-  detailValue: {
-    flex: 2,
-    color: 'white',
+  fieldLabel: {
     fontSize: 16,
+    color: '#C1FF72',
+    marginBottom: 8,
+    fontWeight: '600',
+    marginTop: 15,
+  },
+  inputBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ccc',
+    borderRadius: 40,
+    paddingHorizontal: 15,
+    paddingVertical: 15,
+    marginBottom: 5,
+    width: '100%',
+  },
+  icon: {
+    marginRight: 8,
   },
   input: {
-    flex: 2,
-    color: 'white',
+    flex: 1,
     fontSize: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#C1FF72',
+    color: '#000',
   },
-  editIcon: {
+  fieldText: {
+    flex: 1,
+    fontSize: 16,
+    color: '#000',
+  },
+  actionButton: {
+    marginLeft: 5,
+    padding: 5,
+  },
+  errorText: {
+    color: 'red',
+    fontWeight: 'bold',
+    alignSelf: 'flex-start',
     marginLeft: 10,
+    marginBottom: 5,
   },
 });
