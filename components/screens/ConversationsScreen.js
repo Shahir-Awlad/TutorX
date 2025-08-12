@@ -24,6 +24,13 @@ const ConversationsScreen = ({ navigation }) => {
   const [conversations, setConversations] = useState([]);
   const { user } = useAuth();
 
+  // 🔐 If auth state becomes null, reset to Login
+  useEffect(() => {
+    if (!user) {
+      navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+    }
+  }, [user, navigation]);
+
   useEffect(() => {
     // Don't set up listener if user is null
     if (!user?.uid) {
@@ -65,8 +72,8 @@ const ConversationsScreen = ({ navigation }) => {
         if (!b.lastMessageTime) return -1;
         
         // Compare timestamps
-        const aTime = a.lastMessageTime.seconds || 0;
-        const bTime = b.lastMessageTime.seconds || 0;
+        const aTime = a.lastMessageTime?.seconds || 0;
+        const bTime = b.lastMessageTime?.seconds || 0;
         return bTime - aTime;
       });
       
@@ -83,6 +90,8 @@ const ConversationsScreen = ({ navigation }) => {
       // Clear conversations first to prevent any lingering listeners
       setConversations([]);
       await signOut(auth);
+      // 🔁 Force nav reset immediately after sign-out
+      navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
     } catch (error) {
       console.error('Logout error:', error);
     }

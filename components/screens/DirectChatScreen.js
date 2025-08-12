@@ -183,8 +183,7 @@ const DirectChatScreen = ({ route, navigation }) => {
       />
       
       <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+        behavior='padding'
       >
         <View style={styles.inputContainer}>
           <TextInput
