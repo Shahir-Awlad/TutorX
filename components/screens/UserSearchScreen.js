@@ -9,22 +9,19 @@ import {
   SafeAreaView,
   StatusBar,
   Alert,
-  Platform
+  Platform,
 } from 'react-native';
 import {
   collection,
-  query,
-  orderBy,
-  startAt,
-  endAt,
   getDocs,
   doc,
   setDoc,
   serverTimestamp,
-  getDoc
 } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { useAuth } from '../../contexts/AuthContext';
+
+const ACCENT = '#C1FF72';
 
 const UserSearchScreen = ({ navigation }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -33,7 +30,6 @@ const UserSearchScreen = ({ navigation }) => {
   const { user } = useAuth();
 
   const searchUsers = async () => {
-    // Only search when logged in and have a query
     if (!user?.uid) {
       setSearchResults([]);
       return;
@@ -44,52 +40,23 @@ const UserSearchScreen = ({ navigation }) => {
     }
 
     setLoading(true);
-    const myUid = user?.uid || null;
-    
-    console.log('=== SEARCH DEBUG ===');
-    console.log('Current user UID:', myUid);
-    console.log('Search query:', searchQuery);
-    console.log('Search query lowercase:', searchQuery.toLowerCase());
-    
     try {
+      // Simple all-users fetch + client-side filter to keep it robust
       const usersCol = collection(db, 'Users');
-      
-      // First, let's try to get ALL users to see what's in the database
-      console.log('Fetching all users for debugging...');
-      const allUsersQuery = query(usersCol);
-      const allUsersSnapshot = await getDocs(allUsersQuery);
-      
-      console.log('Total users in database:', allUsersSnapshot.size);
-      allUsersSnapshot.forEach(doc => {
-        const data = doc.data();
-        console.log('User data:', {
-          id: doc.id,
-          email: data.email,
-          username: data.username,
-          uid: data.uid
-        });
-      });
-      
-      // Try client-side filtering as a fallback
-      console.log('Trying client-side filtering...');
-      const searchLower = searchQuery.toLowerCase();
+      const snap = await getDocs(usersCol);
+
+      const term = searchQuery.toLowerCase();
       const map = new Map();
-      
-      allUsersSnapshot.forEach(doc => {
-        const data = doc.data() || {};
-        const uid = data.uid || doc.id;
-        
-        if (myUid && uid === myUid) {
-          console.log('Skipping self:', uid);
-          return;
-        }
-        
+
+      snap.forEach((d) => {
+        const data = d.data() || {};
+        const uid = data.uid || d.id;
+        if (uid === user.uid) return;
+
         const email = (data.email || '').toLowerCase();
         const username = (data.username || '').toLowerCase();
-        
-        // Check if search query matches email or username
-        if (email.includes(searchLower) || username.includes(searchLower)) {
-          console.log('Match found:', { uid, email: data.email, username: data.username });
+
+        if (email.includes(term) || username.includes(term)) {
           map.set(uid, {
             id: uid,
             ...data,
@@ -100,77 +67,81 @@ const UserSearchScreen = ({ navigation }) => {
         }
       });
 
-      console.log('Final search results count:', map.size);
-      console.log('=== END DEBUG ===');
-      
       setSearchResults(Array.from(map.values()));
     } catch (err) {
       console.error('Error searching users:', err);
-      console.error('Error details:', err.message);
-      Alert.alert('Error', `Failed to search users: ${err.message}`);
+      Alert.alert('Error', 'Failed to search users.');
     } finally {
       setLoading(false);
     }
   };
 
   const startConversation = async (selectedUser) => {
-  try {
-    const myUid = user?.uid;
-    if (!myUid) throw new Error('Not signed in');
+    try {
+      const myUid = user?.uid;
+      if (!myUid) throw new Error('Not signed in');
 
-    const otherUid = selectedUser.id;
-    const conversationId = [myUid, otherUid].sort().join('_');
-    const conversationRef = doc(db, 'conversations', conversationId);
+      const otherUid = selectedUser.id;
+      const conversationId = [myUid, otherUid].sort().join('_');
+      const conversationRef = doc(db, 'conversations', conversationId);
 
-    // Create or update the conversation (allowed by your rules because you're a participant)
-    await setDoc(conversationRef, {
-      participants: [myUid, otherUid],
-      participantDetails: {
-        [myUid]: {
-          displayName: user.displayName || (user.email ? user.email.split('@')[0] : 'You'),
-          email: user.email ?? null,
-          username: user.displayName || (user.email ? user.email.split('@')[0] : null),
+      await setDoc(
+        conversationRef,
+        {
+          participants: [myUid, otherUid],
+          participantDetails: {
+            [myUid]: {
+              displayName:
+                user.displayName || (user.email ? user.email.split('@')[0] : 'You'),
+              email: user.email ?? null,
+              username: user.displayName || (user.email ? user.email.split('@')[0] : null),
+            },
+            [otherUid]: {
+              displayName:
+                selectedUser.displayName || selectedUser.username || selectedUser.email,
+              email: selectedUser.email ?? null,
+              username: selectedUser.username ?? null,
+            },
+          },
+          createdAt: serverTimestamp(),
+          lastMessage: '',
+          lastMessageTime: serverTimestamp(),
         },
-        [otherUid]: {
-          displayName: selectedUser.displayName || selectedUser.username || selectedUser.email,
+        { merge: true }
+      );
+
+      navigation.navigate('DirectChat', {
+        conversationId,
+        otherUser: {
+          id: otherUid,
+          displayName:
+            selectedUser.displayName || selectedUser.username || selectedUser.email,
           email: selectedUser.email ?? null,
           username: selectedUser.username ?? null,
         },
-      },
-      createdAt: serverTimestamp(),
-      lastMessage: '',
-      lastMessageTime: serverTimestamp(),
-    }, { merge: true }); // merge lets this be safe whether the doc exists or not
-
-    navigation.navigate('DirectChat', {
-      conversationId,
-      otherUser: {
-        id: otherUid,
-        displayName: selectedUser.displayName || selectedUser.username || selectedUser.email,
-        email: selectedUser.email ?? null,
-        username: selectedUser.username ?? null,
-      },
-    });
-  } catch (error) {
-    console.error('Error starting conversation:', error);
-    Alert.alert('Error', `Failed to start conversation: ${error.message}`);
-  }
-};
+      });
+    } catch (error) {
+      console.error('Error starting conversation:', error);
+      Alert.alert('Error', `Failed to start conversation: ${error.message}`);
+    }
+  };
 
   useEffect(() => {
-    const t = setTimeout(searchUsers, 400); // debounce
+    const t = setTimeout(searchUsers, 400);
     return () => clearTimeout(t);
   }, [searchQuery, user?.uid]);
 
   const renderUser = ({ item }) => (
-    <TouchableOpacity style={styles.userItem} onPress={() => startConversation(item)}>
-      <View style={styles.userAvatar}>
-        <Text style={styles.userAvatarText}>
+    <TouchableOpacity style={styles.userRow} onPress={() => startConversation(item)}>
+      <View style={styles.avatar}>
+        <Text style={styles.avatarText}>
           {(item.displayName || item.username || item.email)?.charAt(0).toUpperCase()}
         </Text>
       </View>
-      <View style={styles.userInfo}>
-        <Text style={styles.userName}>{item.displayName || item.username || item.email}</Text>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.userName}>
+          {item.displayName || item.username || item.email}
+        </Text>
         {item.email ? <Text style={styles.userEmail}>{item.email}</Text> : null}
       </View>
     </TouchableOpacity>
@@ -178,47 +149,59 @@ const UserSearchScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor="#007bff" barStyle="light-content" />
+      <StatusBar backgroundColor="#111" barStyle="light-content" />
+
+      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backButton}>← Back</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+          <Text style={styles.backTxt}>← Back</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Find Users</Text>
-        <View style={styles.placeholder} />
+        <View style={{ width: 60 }} />
       </View>
 
-      <View style={styles.searchContainer}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search by username or email..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          autoCapitalize="none"
-          autoCorrect={false}
-          returnKeyType="search"
-        />
-      </View>
-
-      {loading && (
-        <View style={styles.loadingContainer}>
-          <Text>Searching...</Text>
+      {/* Card */}
+      <View style={styles.card}>
+        {/* Search box */}
+        <View style={styles.searchBox}>
+          <TextInput
+            style={styles.input}
+            placeholder="Search by username or email..."
+            placeholderTextColor="#555"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
+          />
+          <TouchableOpacity style={styles.searchBtn} onPress={searchUsers}>
+            <Text style={styles.searchBtnText}>Search</Text>
+          </TouchableOpacity>
         </View>
-      )}
 
-      <FlatList
-        data={searchResults}
-        renderItem={renderUser}
-        keyExtractor={(item) => item.id}
-        style={styles.usersList}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          searchQuery && !loading ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No users found</Text>
-            </View>
-          ) : null
-        }
-      />
+        {/* Results */}
+        {loading ? (
+          <View style={styles.loading}>
+            <Text style={{ color: '#ccc' }}>Searching...</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={searchResults}
+            renderItem={renderUser}
+            keyExtractor={(item) => item.id}
+            ItemSeparatorComponent={() => <View style={styles.separator} />}
+            ListEmptyComponent={
+              searchQuery ? (
+                <View style={styles.empty}>
+                  <Text style={styles.emptyText}>No users found</Text>
+                </View>
+              ) : null
+            }
+            contentContainerStyle={{ paddingBottom: 12 }}
+            showsVerticalScrollIndicator={false}
+          />
+        )}
+      </View>
     </SafeAreaView>
   );
 };
@@ -226,95 +209,67 @@ const UserSearchScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#111',
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+    paddingHorizontal: 16,
   },
   header: {
+    paddingTop: 10,
+    paddingBottom: 12,
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    backgroundColor: '#007bff',
   },
-  backButton: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  headerTitle: {
-    color: 'white',
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  placeholder: {
-    width: 50,
-  },
-  searchContainer: {
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    backgroundColor: 'white',
-  },
-  searchInput: {
-    backgroundColor: '#f8f9fa',
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    borderRadius: 25,
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: '#e1e5e9',
-  },
-  loadingContainer: {
-    padding: 20,
-    alignItems: 'center',
-  },
-  usersList: {
+  backBtn: { paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#2e2e2e', borderRadius: 12 },
+  backTxt: { color: '#fff', fontWeight: '600' },
+  headerTitle: { color: ACCENT, fontSize: 18, fontWeight: 'bold' },
+
+  card: {
     flex: 1,
+    backgroundColor: '#2e2e2e',
+    borderRadius: 20,
+    padding: 12,
   },
-  userItem: {
+  searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    marginBottom: 8,
   },
-  userAvatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#007bff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 15,
-  },
-  userAvatarText: {
-    color: 'white',
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  userInfo: {
+  input: {
     flex: 1,
+    backgroundColor: '#ccc',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    color: '#000',
+    marginRight: 8,
   },
-  userName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 2,
+  searchBtn: {
+    backgroundColor: ACCENT,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 18,
   },
-  userEmail: {
-    fontSize: 14,
-    color: '#666',
-  },
-  emptyContainer: {
-    padding: 40,
+  searchBtnText: { color: '#000', fontWeight: '700' },
+
+  separator: { height: 1, backgroundColor: '#444' },
+  userRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
+  avatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: ACCENT,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
   },
-  emptyText: {
-    fontSize: 16,
-    color: '#666',
-  },
+  avatarText: { color: '#000', fontWeight: 'bold' },
+  userName: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  userEmail: { color: '#bbb', fontSize: 13, marginTop: 2 },
+
+  loading: { paddingVertical: 20, alignItems: 'center' },
+  empty: { paddingVertical: 28, alignItems: 'center' },
+  emptyText: { color: '#bbb', fontSize: 14 },
 });
 
 export default UserSearchScreen;
