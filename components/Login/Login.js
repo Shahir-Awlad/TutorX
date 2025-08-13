@@ -38,7 +38,7 @@ export default function Login() {
         Alert.alert('Login Successful', `Welcome back, ${user.email}`);
         setEmail('');
         setPassword('');
-        navigation.replace('Conversations');
+        navigation.replace('Mainpage');
       })
       .catch((error) => {
         if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-email') {

@@ -13,6 +13,7 @@ import { signOut } from 'firebase/auth';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../../firebaseConfig';
 import { useAuth } from '../../contexts/AuthContext';
+import TabBar from '../Navigation/TabBar';
 
 const ConversationsScreen = ({ navigation }) => {
   const [conversations, setConversations] = useState([]);
@@ -165,6 +166,7 @@ const ConversationsScreen = ({ navigation }) => {
           contentContainerStyle={{ paddingVertical: 8 }}
         />
       </View>
+      <TabBar/>
     </SafeAreaView>
   );
 };

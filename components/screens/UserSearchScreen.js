@@ -20,6 +20,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { useAuth } from '../../contexts/AuthContext';
+import TabBar from '../Navigation/TabBar';
 
 const ACCENT = '#C1FF72';
 
@@ -202,6 +203,7 @@ const UserSearchScreen = ({ navigation }) => {
           />
         )}
       </View>
+      <TabBar />
     </SafeAreaView>
   );
 };

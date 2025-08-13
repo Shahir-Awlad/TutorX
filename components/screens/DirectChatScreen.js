@@ -23,8 +23,11 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { useAuth } from '../../contexts/AuthContext';
+import TabBar from '../Navigation/TabBar';
 
 const ACCENT = '#C1FF72';
+const TABBAR_HEIGHT = 70; // <- reserve space equal to your TabBar height
+const HEADER_OFFSET = Platform.OS === 'ios' ? 90 : 0;
 
 const DirectChatScreen = ({ route, navigation }) => {
   const { conversationId, otherUser } = route.params;
@@ -155,21 +158,30 @@ const DirectChatScreen = ({ route, navigation }) => {
         <View style={{ width: 60 }} />
       </View>
 
-      {/* Chat card */}
-      <View style={styles.card}>
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          renderItem={renderMessage}
-          keyExtractor={(item) => item.id}
-          inverted
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 8 }}
-        />
+      {/* Chat + Input */}
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior='padding'
+        // push content above both header and the tab bar
+        keyboardVerticalOffset={HEADER_OFFSET + TABBAR_HEIGHT}
+      >
+        <View style={styles.card}>
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            renderItem={renderMessage}
+            keyExtractor={(item) => item.id}
+            inverted
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              paddingBottom: TABBAR_HEIGHT + 12, // keep last items clear of the TabBar
+            }}
+          />
 
-        {/* Input */}
-        <KeyboardAvoidingView behavior='padding' keyboardVerticalOffset={100}> 
-          <View style={styles.inputRow}>
+          {/* Input */}
+          <View style={[styles.inputRow, { marginBottom: TABBAR_HEIGHT }]}>
             <TextInput
               style={styles.input}
               value={message}
@@ -187,18 +199,21 @@ const DirectChatScreen = ({ route, navigation }) => {
               <Text style={styles.sendTxt}>Send</Text>
             </TouchableOpacity>
           </View>
-        </KeyboardAvoidingView>
-      </View>
+        </View>
+      </KeyboardAvoidingView>
+
+      {/* Fixed TabBar (overlays content), so we reserved space above */}
+      <TabBar />
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: 
-  { flex: 1, 
+  flex: { flex: 1 },
+  container: {
+    flex: 1,
     backgroundColor: '#111',
-    paddingBottom: 10
-   },
+  },
   header: {
     paddingHorizontal: 16,
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 12,
