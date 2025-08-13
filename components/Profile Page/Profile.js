@@ -20,6 +20,8 @@ import { Ionicons, Feather, Fontisto, MaterialIcons } from '@expo/vector-icons';
 import { db } from '../../firebaseConfig';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
+import TabBar from '../Navigation/TabBar';
+
 const { width, height } = Dimensions.get('window');
 
 export default function Profile() {
@@ -498,8 +500,10 @@ export default function Profile() {
             </View>
 
           </View>
+          
         </SafeAreaView>
       </ScrollView>
+      <TabBar />
     </KeyboardAvoidingView>
   );
 }
@@ -508,6 +512,7 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#000',
+    paddingBottom: 55,
   },
   headerContainer: {
     height: height * 0.35,
