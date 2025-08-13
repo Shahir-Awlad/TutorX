@@ -12,6 +12,8 @@ import DirectChatScreen from './components/screens/DirectChatScreen';
 import UserSearchScreen from './components/screens/UserSearchScreen';
 
 import { AuthProvider } from './contexts/AuthContext'; // ⬅️ add this
+import Chat from './components/Chat/Chat';
+import Tuition from './components/Tuition/Tuition';
 
 const Stack = createNativeStackNavigator();
 
@@ -27,6 +29,7 @@ export default function App() {
           <Stack.Screen name="Conversations" component={ConversationsScreen} />
           <Stack.Screen name="DirectChat" component={DirectChatScreen} />
           <Stack.Screen name="UserSearch" component={UserSearchScreen} />
+          <Stack.Screen name="Tuition" component={Tuition} />
         </Stack.Navigator>
       </NavigationContainer>
     </AuthProvider>

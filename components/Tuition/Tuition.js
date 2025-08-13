@@ -5,7 +5,7 @@ import { getAuth } from 'firebase/auth';
 
 import TabBar from '../Navigation/TabBar';
 
-export default function Mainpage() {
+export default function Tution() {
   const navigation = useNavigation();
   const [userData, setUserData] = useState(null);
 
@@ -22,39 +22,22 @@ export default function Mainpage() {
     }
   }, []);
 
-  const handleProfilePress = () => {
-    navigation.navigate('Profile', { userData });
-  };
-
   return (
     <View style={styles.mainContainer}>
-      <Text style={styles.mainText}>Login successful! This is the main page.</Text>
-      
-      {userData && (
-        <View style={styles.userInfo}>
-          <Text style={styles.userText}>Logged in as: {userData.email}</Text>
-        </View>
-      )}
+      <Text style={styles.mainText}>This is the tution page.</Text>
 
-      <TouchableOpacity 
-        style={styles.profileButton}
-        onPress={handleProfilePress}
-      >
-        <Text style={styles.buttonText}>Go to Profile</Text>
-      </TouchableOpacity>
-      <TabBar />
-    </View>    
+      <TabBar/>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,
-    backgroundColor: '#030303ff',
+    backgroundColor: '#000000ff',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
-    //paddingBottom: 60,
   },
   mainText: {
     color: '#C1FF72',
