@@ -41,7 +41,7 @@ export default function TabBar() {
           <Ionicons
             name={isActive('Conversations') ? 'chatbubble' : 'chatbubble-outline'}
             size={28}
-            color={isActive('Conversations') ? '#C1FF72' : '#acacacff'}
+            color={isActive('Conversations') || isActive('DirectChat') || isActive('UserSearch')? '#C1FF72' : '#acacacff'}
           />
         </TouchableOpacity>
 
