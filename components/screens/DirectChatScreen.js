@@ -1,10 +1,138 @@
-// DirectChatScreen.jsx
-// ...imports unchanged...
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  FlatList,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+  StatusBar,
+} from 'react-native';
+import {
+  collection,
+  addDoc,
+  query,
+  orderBy,
+  onSnapshot,
+  serverTimestamp,
+  doc,
+  updateDoc,
+} from 'firebase/firestore';
+import { db } from '../../firebaseConfig';
+import { useAuth } from '../../contexts/AuthContext';
+import TabBar from '../Navigation/TabBar';
+
 const ACCENT = '#C1FF72';
+const TABBAR_HEIGHT = 70; // <- reserve space equal to your TabBar height
 const HEADER_OFFSET = Platform.OS === 'ios' ? 90 : 0;
 
 const DirectChatScreen = ({ route, navigation }) => {
-  // ...state/effects unchanged...
+  const { conversationId, otherUser } = route.params;
+  const [message, setMessage] = useState('');
+  const [messages, setMessages] = useState([]);
+  const { user } = useAuth();
+  const flatListRef = useRef();
+
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    navigation.setOptions({
+      title: otherUser.displayName || otherUser.username || otherUser.email,
+    });
+
+    const messagesRef = collection(db, 'conversations', conversationId, 'messages');
+    const q = query(messagesRef, orderBy('createdAt', 'desc'));
+
+    const unsubscribe = onSnapshot(
+      q,
+      (querySnapshot) => {
+        const messagesData = [];
+        querySnapshot.forEach((d) => {
+          messagesData.push({ id: d.id, ...d.data() });
+        });
+        setMessages(messagesData);
+      },
+      (error) => console.error('Error fetching messages:', error)
+    );
+
+    return unsubscribe;
+  }, [conversationId, otherUser, user?.uid, navigation]);
+
+  const sendMessage = async () => {
+    if (message.trim() === '' || !user?.uid) return;
+
+    const messageText = message.trim();
+    setMessage('');
+
+    try {
+      const messagesRef = collection(db, 'conversations', conversationId, 'messages');
+      await addDoc(messagesRef, {
+        text: messageText,
+        createdAt: serverTimestamp(),
+        senderId: user.uid,
+        senderName: user.displayName || user.email,
+      });
+
+      const conversationRef = doc(db, 'conversations', conversationId);
+      await updateDoc(conversationRef, {
+        lastMessage: messageText,
+        lastMessageTime: serverTimestamp(),
+      });
+    } catch (error) {
+      console.error('Error sending message:', error);
+      setMessage(messageText);
+    }
+  };
+
+  const formatTime = (timestamp) => {
+    if (!timestamp) return '';
+    const date = timestamp.toDate();
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const formatDate = (timestamp) => {
+    if (!timestamp) return '';
+    const date = timestamp.toDate();
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    if (date.toDateString() === today.toDateString()) return 'Today';
+    if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
+    return date.toLocaleDateString();
+  };
+
+  const renderDateSeparator = (timestamp) => (
+    <View style={styles.dateSeparator}>
+      <Text style={styles.dateText}>{formatDate(timestamp)}</Text>
+    </View>
+  );
+
+  const renderMessage = ({ item, index }) => {
+    if (!user?.uid) return null;
+
+    const isMyMessage = item.senderId === user.uid;
+    const nextMessage = messages[index - 1];
+    const showDate =
+      !nextMessage || formatDate(item.createdAt) !== formatDate(nextMessage.createdAt);
+
+    return (
+      <View>
+        {showDate && renderDateSeparator(item.createdAt)}
+        <View style={[styles.bubble, isMyMessage ? styles.myBubble : styles.otherBubble]}>
+          <Text style={[styles.msgText, isMyMessage ? styles.myText : styles.otherText]}>
+            {item.text}
+          </Text>
+          <Text style={[styles.timeText, isMyMessage ? styles.myTime : styles.otherTime]}>
+            {formatTime(item.createdAt)}
+          </Text>
+        </View>
+      </View>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -18,7 +146,9 @@ const DirectChatScreen = ({ route, navigation }) => {
         <View style={styles.headerCenter}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>
-              {(otherUser.displayName || otherUser.username || otherUser.email)?.charAt(0).toUpperCase()}
+              {(otherUser.displayName || otherUser.username || otherUser.email)
+                ?.charAt(0)
+                .toUpperCase()}
             </Text>
           </View>
           <Text style={styles.headerTitle}>
@@ -28,8 +158,13 @@ const DirectChatScreen = ({ route, navigation }) => {
         <View style={{ width: 60 }} />
       </View>
 
-      {/* Chat + Input above a LAYOUT TabBar */}
-      
+      {/* Chat + Input */}
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior='padding'
+        // push content above both header and the tab bar
+        keyboardVerticalOffset={HEADER_OFFSET + TABBAR_HEIGHT}
+      >
         <View style={styles.card}>
           <FlatList
             ref={flatListRef}
@@ -38,17 +173,15 @@ const DirectChatScreen = ({ route, navigation }) => {
             keyExtractor={(item) => item.id}
             inverted
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 8 }}
+            contentContainerStyle={{
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              paddingBottom: TABBAR_HEIGHT + 12, // keep last items clear of the TabBar
+            }}
           />
 
           {/* Input */}
-          <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={HEADER_OFFSET} // no tabbar height here anymore
-      >
-        
-          <View style={styles.inputRow}>
+          <View style={[styles.inputRow, { marginBottom: TABBAR_HEIGHT }]}>
             <TextInput
               style={styles.input}
               value={message}
@@ -66,18 +199,21 @@ const DirectChatScreen = ({ route, navigation }) => {
               <Text style={styles.sendTxt}>Send</Text>
             </TouchableOpacity>
           </View>
-          </KeyboardAvoidingView>
         </View>
-      
+      </KeyboardAvoidingView>
 
-      {/* TabBar now participates in layout (always visible) */}
+      {/* Fixed TabBar (overlays content), so we reserved space above */}
       <TabBar />
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#111' },
+  flex: { flex: 1 },
+  container: {
+    flex: 1,
+    backgroundColor: '#111',
+  },
   header: {
     paddingHorizontal: 16,
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 12,
@@ -90,8 +226,13 @@ const styles = StyleSheet.create({
   backTxt: { color: '#fff', fontWeight: '600' },
   headerCenter: { flexDirection: 'row', alignItems: 'center' },
   avatar: {
-    width: 34, height: 34, borderRadius: 17, backgroundColor: ACCENT,
-    alignItems: 'center', justifyContent: 'center', marginRight: 10,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: ACCENT,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
   },
   avatarText: { color: '#000', fontWeight: 'bold' },
   headerTitle: { color: ACCENT, fontSize: 16, fontWeight: 'bold' },
@@ -105,11 +246,31 @@ const styles = StyleSheet.create({
   },
 
   dateSeparator: { alignItems: 'center', marginVertical: 10 },
-  dateText: { backgroundColor: '#1e1e1e', color: '#bbb', fontSize: 12, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 },
+  dateText: {
+    backgroundColor: '#1e1e1e',
+    color: '#bbb',
+    fontSize: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
 
-  bubble: { marginVertical: 3, maxWidth: '80%', padding: 12, borderRadius: 16 },
-  myBubble: { alignSelf: 'flex-end', backgroundColor: ACCENT, borderBottomRightRadius: 6 },
-  otherBubble: { alignSelf: 'flex-start', backgroundColor: '#3b3b3b', borderBottomLeftRadius: 6 },
+  bubble: {
+    marginVertical: 3,
+    maxWidth: '80%',
+    padding: 12,
+    borderRadius: 16,
+  },
+  myBubble: {
+    alignSelf: 'flex-end',
+    backgroundColor: ACCENT,
+    borderBottomRightRadius: 6,
+  },
+  otherBubble: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#3b3b3b',
+    borderBottomLeftRadius: 6,
+  },
   msgText: { fontSize: 16, lineHeight: 20 },
   myText: { color: '#000' },
   otherText: { color: '#fff' },
@@ -133,7 +294,12 @@ const styles = StyleSheet.create({
     color: '#000',
     maxHeight: 120,
   },
-  sendBtn: { backgroundColor: ACCENT, borderRadius: 20, paddingHorizontal: 18, paddingVertical: 10 },
+  sendBtn: {
+    backgroundColor: ACCENT,
+    borderRadius: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
   sendBtnDisabled: { opacity: 0.5 },
   sendTxt: { color: '#000', fontWeight: '700' },
 });
