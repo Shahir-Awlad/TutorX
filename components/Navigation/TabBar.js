@@ -39,7 +39,7 @@ export default function TabBar() {
         >
           {/* Fix active route name to match your screen: 'Conversations' */}
           <Ionicons
-            name={isActive('Conversations') ? 'chatbubble' : 'chatbubble-outline'}
+            name={isActive('Conversations') || isActive('DirectChat') || isActive('UserSearch') ? 'chatbubble' : 'chatbubble-outline'}
             size={28}
             color={isActive('Conversations') || isActive('DirectChat') || isActive('UserSearch')? '#C1FF72' : '#acacacff'}
           />
