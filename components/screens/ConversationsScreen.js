@@ -7,82 +7,75 @@ import {
   StyleSheet,
   SafeAreaView,
   StatusBar,
-  Platform
+  Platform,
 } from 'react-native';
 import { signOut } from 'firebase/auth';
-import { 
-  collection, 
-  query, 
-  where, 
-  onSnapshot,
-  orderBy 
-} from 'firebase/firestore';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../../firebaseConfig';
 import { useAuth } from '../../contexts/AuthContext';
+import TabBar from '../Navigation/TabBar';
 
 const ConversationsScreen = ({ navigation }) => {
   const [conversations, setConversations] = useState([]);
   const { user } = useAuth();
 
   useEffect(() => {
-    // Don't set up listener if user is null
+    if (!user) {
+      navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+    }
+  }, [user, navigation]);
+
+  useEffect(() => {
     if (!user?.uid) {
       setConversations([]);
       return;
     }
 
-    // Simple query without orderBy to avoid index requirement
     const q = query(
       collection(db, 'conversations'),
       where('participants', 'array-contains', user.uid)
     );
-    
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const conversationsData = [];
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        // Get the other participant's details
-        const otherParticipantId = data.participants.find(id => id !== user.uid);
-        const otherParticipant = data.participantDetails?.[otherParticipantId];
-        
-        if (otherParticipant) {
-          conversationsData.push({
-            id: doc.id,
-            ...data,
-            otherParticipant: {
-              id: otherParticipantId,
-              ...otherParticipant
-            }
-          });
-        }
-      });
-      
-      // Sort manually by lastMessageTime (most recent first)
-      conversationsData.sort((a, b) => {
-        // Handle conversations without messages
-        if (!a.lastMessageTime && !b.lastMessageTime) return 0;
-        if (!a.lastMessageTime) return 1;
-        if (!b.lastMessageTime) return -1;
-        
-        // Compare timestamps
-        const aTime = a.lastMessageTime.seconds || 0;
-        const bTime = b.lastMessageTime.seconds || 0;
-        return bTime - aTime;
-      });
-      
-      setConversations(conversationsData);
-    }, (error) => {
-      console.error('Error fetching conversations:', error);
-    });
+
+    const unsubscribe = onSnapshot(
+      q,
+      (querySnapshot) => {
+        const conversationsData = [];
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          const otherParticipantId = data.participants.find((id) => id !== user.uid);
+          const otherParticipant = data.participantDetails?.[otherParticipantId];
+
+          if (otherParticipant) {
+            conversationsData.push({
+              id: doc.id,
+              ...data,
+              otherParticipant: {
+                id: otherParticipantId,
+                ...otherParticipant,
+              },
+            });
+          }
+        });
+
+        conversationsData.sort((a, b) => {
+          const aTime = a.lastMessageTime?.seconds || 0;
+          const bTime = b.lastMessageTime?.seconds || 0;
+          return bTime - aTime;
+        });
+
+        setConversations(conversationsData);
+      },
+      (error) => console.error('Error fetching conversations:', error)
+    );
 
     return unsubscribe;
   }, [user?.uid]);
 
   const handleLogout = async () => {
     try {
-      // Clear conversations first to prevent any lingering listeners
       setConversations([]);
       await signOut(auth);
+      navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
     } catch (error) {
       console.error('Logout error:', error);
     }
@@ -94,37 +87,44 @@ const ConversationsScreen = ({ navigation }) => {
     const now = new Date();
     const diffTime = now - date;
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    
-    if (diffDays === 0) {
+
+    if (diffDays === 0)
       return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } else if (diffDays === 1) {
-      return 'Yesterday';
-    } else if (diffDays < 7) {
-      return date.toLocaleDateString([], { weekday: 'short' });
-    } else {
-      return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-    }
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return date.toLocaleDateString([], { weekday: 'short' });
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
   };
 
   const renderConversation = ({ item }) => (
     <TouchableOpacity
-      style={styles.conversationItem}
-      onPress={() => navigation.navigate('DirectChat', {
-        conversationId: item.id,
-        otherUser: item.otherParticipant
-      })}
+      style={styles.row}
+      onPress={() =>
+        navigation.navigate('DirectChat', {
+          conversationId: item.id,
+          otherUser: item.otherParticipant,
+        })
+      }
     >
-      <View style={styles.userAvatar}>
-        <Text style={styles.userAvatarText}>
-          {(item.otherParticipant.displayName || item.otherParticipant.username || item.otherParticipant.email)?.charAt(0).toUpperCase()}
+      <View style={styles.avatar}>
+        <Text style={styles.avatarText}>
+          {(item.otherParticipant.displayName ||
+            item.otherParticipant.username ||
+            item.otherParticipant.email)
+            ?.charAt(0)
+            .toUpperCase()}
         </Text>
       </View>
-      <View style={styles.conversationInfo}>
-        <View style={styles.conversationHeader}>
-          <Text style={styles.userName}>{item.otherParticipant.displayName || item.otherParticipant.username || item.otherParticipant.email}</Text>
-          <Text style={styles.timeText}>{formatTime(item.lastMessageTime)}</Text>
+
+      <View style={styles.rowContent}>
+        <View style={styles.rowHeader}>
+          <Text style={styles.name}>
+            {item.otherParticipant.displayName ||
+              item.otherParticipant.username ||
+              item.otherParticipant.email}
+          </Text>
+          <Text style={styles.time}>{formatTime(item.lastMessageTime)}</Text>
         </View>
-        <Text style={styles.lastMessage} numberOfLines={1}>
+        <Text style={styles.preview} numberOfLines={1}>
           {item.lastMessage || 'No messages yet'}
         </Text>
       </View>
@@ -133,153 +133,112 @@ const ConversationsScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor="#007bff" barStyle="light-content" />
+      <StatusBar barStyle="light-content" backgroundColor="#111" />
+      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Messages</Text>
-        <View style={styles.headerButtons}>
-          <TouchableOpacity 
-            style={styles.newChatButton}
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={styles.circleBtn}
             onPress={() => navigation.navigate('UserSearch')}
           >
-            <Text style={styles.newChatText}>+</Text>
+            <Text style={styles.circleBtnText}>+</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-            <Text style={styles.logoutText}>Logout</Text>
+          <TouchableOpacity style={styles.secondaryBtn} onPress={handleLogout}>
+            <Text style={styles.secondaryBtnText}>Logout</Text>
           </TouchableOpacity>
         </View>
       </View>
-      
-      <FlatList
-        data={conversations}
-        renderItem={renderConversation}
-        keyExtractor={item => item.id}
-        style={styles.conversationsList}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyTitle}>No conversations yet</Text>
-            <Text style={styles.emptySubtitle}>Tap the + button to start a new chat</Text>
-          </View>
-        }
-      />
+
+      {/* Card */}
+      <View style={styles.card}>
+        <FlatList
+          data={conversations}
+          renderItem={renderConversation}
+          keyExtractor={(item) => item.id}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Text style={styles.emptyTitle}>No conversations yet</Text>
+              <Text style={styles.emptySubtitle}>Tap + to start a new chat</Text>
+            </View>
+          }
+          contentContainerStyle={{ paddingVertical: 8 }}
+        />
+      </View>
+      <TabBar/>
     </SafeAreaView>
   );
 };
 
+const ACCENT = '#C1FF72';
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#111',
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+    paddingHorizontal: 16,
   },
   header: {
+    paddingTop: 10,
+    paddingBottom: 14,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    backgroundColor: '#007bff',
   },
-  headerTitle: {
-    color: 'white',
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  headerButtons: {
-    flexDirection: 'row',
+  headerTitle: { color: ACCENT, fontSize: 18, fontWeight: 'bold' },
+  headerActions: { flexDirection: 'row', alignItems: 'center' },
+  circleBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: ACCENT,
     alignItems: 'center',
-  },
-  newChatButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
-    alignItems: 'center',
     marginRight: 10,
   },
-  newChatText: {
-    color: 'white',
-    fontSize: 20,
-    fontWeight: 'bold',
+  circleBtnText: { color: '#000', fontSize: 20, fontWeight: 'bold' },
+  secondaryBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: '#2e2e2e',
   },
-  logoutButton: {
-    paddingHorizontal: 15,
-    paddingVertical: 5,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 5,
-  },
-  logoutText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  conversationsList: {
+  secondaryBtnText: { color: '#fff', fontWeight: '600' },
+
+  card: {
     flex: 1,
+    backgroundColor: '#2e2e2e',
+    borderRadius: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
   },
-  conversationItem: {
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    paddingHorizontal: 8,
+    paddingVertical: 12,
   },
-  userAvatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#007bff',
+  separator: { height: 1, backgroundColor: '#444', marginHorizontal: 8 },
+  avatar: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: ACCENT,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 15,
+    marginRight: 12,
   },
-  userAvatarText: {
-    color: 'white',
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  conversationInfo: {
-    flex: 1,
-  },
-  conversationHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  userName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-  },
-  timeText: {
-    fontSize: 12,
-    color: '#666',
-  },
-  lastMessage: {
-    fontSize: 14,
-    color: '#666',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 40,
-    paddingTop: 100,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 10,
-  },
-  emptySubtitle: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-  },
+  avatarText: { color: '#000', fontSize: 18, fontWeight: 'bold' },
+  rowContent: { flex: 1 },
+  rowHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 },
+  name: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  time: { color: '#bbb', fontSize: 12 },
+  preview: { color: '#ccc', fontSize: 14 },
+  empty: { paddingVertical: 32, alignItems: 'center' },
+  emptyTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginBottom: 6 },
+  emptySubtitle: { color: '#bbb', fontSize: 14 },
 });
 
 export default ConversationsScreen;

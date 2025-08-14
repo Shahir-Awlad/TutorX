@@ -227,6 +227,7 @@ export default function Profile() {
         contentContainerStyle={{ flexGrow: 1, paddingBottom: 90, backgroundColor: '#000' }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+
       >
         <SafeAreaView style={styles.safeArea}>
           <StatusBar barStyle="light-content" backgroundColor="#000" />

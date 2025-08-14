@@ -11,18 +11,23 @@ import {
   SafeAreaView,
   StatusBar,
 } from 'react-native';
-import { 
-  collection, 
-  addDoc, 
-  query, 
-  orderBy, 
+import {
+  collection,
+  addDoc,
+  query,
+  orderBy,
   onSnapshot,
   serverTimestamp,
   doc,
-  updateDoc
+  updateDoc,
 } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { useAuth } from '../../contexts/AuthContext';
+import TabBar from '../Navigation/TabBar';
+
+const ACCENT = '#C1FF72';
+const TABBAR_HEIGHT = 70; // <- reserve space equal to your TabBar height
+const HEADER_OFFSET = Platform.OS === 'ios' ? 90 : 0;
 
 const DirectChatScreen = ({ route, navigation }) => {
   const { conversationId, otherUser } = route.params;
@@ -32,35 +37,29 @@ const DirectChatScreen = ({ route, navigation }) => {
   const flatListRef = useRef();
 
   useEffect(() => {
-    // Don't set up listener if user is null
-    if (!user?.uid) {
-      return;
-    }
+    if (!user?.uid) return;
 
-    // Set navigation title
     navigation.setOptions({
-      title: otherUser.displayName || otherUser.username || otherUser.email
+      title: otherUser.displayName || otherUser.username || otherUser.email,
     });
 
-    // Listen to messages in this conversation
     const messagesRef = collection(db, 'conversations', conversationId, 'messages');
     const q = query(messagesRef, orderBy('createdAt', 'desc'));
-    
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const messagesData = [];
-      querySnapshot.forEach((doc) => {
-        messagesData.push({
-          id: doc.id,
-          ...doc.data(),
+
+    const unsubscribe = onSnapshot(
+      q,
+      (querySnapshot) => {
+        const messagesData = [];
+        querySnapshot.forEach((d) => {
+          messagesData.push({ id: d.id, ...d.data() });
         });
-      });
-      setMessages(messagesData);
-    }, (error) => {
-      console.error('Error fetching messages:', error);
-    });
+        setMessages(messagesData);
+      },
+      (error) => console.error('Error fetching messages:', error)
+    );
 
     return unsubscribe;
-  }, [conversationId, otherUser, user?.uid]);
+  }, [conversationId, otherUser, user?.uid, navigation]);
 
   const sendMessage = async () => {
     if (message.trim() === '' || !user?.uid) return;
@@ -69,7 +68,6 @@ const DirectChatScreen = ({ route, navigation }) => {
     setMessage('');
 
     try {
-      // Add message to conversation's messages subcollection
       const messagesRef = collection(db, 'conversations', conversationId, 'messages');
       await addDoc(messagesRef, {
         text: messageText,
@@ -78,16 +76,13 @@ const DirectChatScreen = ({ route, navigation }) => {
         senderName: user.displayName || user.email,
       });
 
-      // Update conversation's last message
       const conversationRef = doc(db, 'conversations', conversationId);
       await updateDoc(conversationRef, {
         lastMessage: messageText,
         lastMessageTime: serverTimestamp(),
       });
-
     } catch (error) {
       console.error('Error sending message:', error);
-      // Restore message if sending failed
       setMessage(messageText);
     }
   };
@@ -104,14 +99,10 @@ const DirectChatScreen = ({ route, navigation }) => {
     const today = new Date();
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
-    
-    if (date.toDateString() === today.toDateString()) {
-      return 'Today';
-    } else if (date.toDateString() === yesterday.toDateString()) {
-      return 'Yesterday';
-    } else {
-      return date.toLocaleDateString();
-    }
+
+    if (date.toDateString() === today.toDateString()) return 'Today';
+    if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
+    return date.toLocaleDateString();
   };
 
   const renderDateSeparator = (timestamp) => (
@@ -122,29 +113,20 @@ const DirectChatScreen = ({ route, navigation }) => {
 
   const renderMessage = ({ item, index }) => {
     if (!user?.uid) return null;
-    
+
     const isMyMessage = item.senderId === user.uid;
     const nextMessage = messages[index - 1];
-    const showDate = !nextMessage || 
-      formatDate(item.createdAt) !== formatDate(nextMessage.createdAt);
-    
+    const showDate =
+      !nextMessage || formatDate(item.createdAt) !== formatDate(nextMessage.createdAt);
+
     return (
       <View>
         {showDate && renderDateSeparator(item.createdAt)}
-        <View style={[
-          styles.messageContainer,
-          isMyMessage ? styles.myMessage : styles.otherMessage
-        ]}>
-          <Text style={[
-            styles.messageText,
-            isMyMessage ? styles.myMessageText : styles.otherMessageText
-          ]}>
+        <View style={[styles.bubble, isMyMessage ? styles.myBubble : styles.otherBubble]}>
+          <Text style={[styles.msgText, isMyMessage ? styles.myText : styles.otherText]}>
             {item.text}
           </Text>
-          <Text style={[
-            styles.timeText,
-            isMyMessage ? styles.myTimeText : styles.otherTimeText
-          ]}>
+          <Text style={[styles.timeText, isMyMessage ? styles.myTime : styles.otherTime]}>
             {formatTime(item.createdAt)}
           </Text>
         </View>
@@ -154,202 +136,172 @@ const DirectChatScreen = ({ route, navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor="#007bff" barStyle="light-content" />
-      
-      {/* Custom Header */}
+      <StatusBar backgroundColor="#111" barStyle="light-content" />
+
+      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backButton}>← Back</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+          <Text style={styles.backTxt}>← Back</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <View style={styles.userAvatar}>
-            <Text style={styles.userAvatarText}>
-              {(otherUser.displayName || otherUser.username || otherUser.email)?.charAt(0).toUpperCase()}
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>
+              {(otherUser.displayName || otherUser.username || otherUser.email)
+                ?.charAt(0)
+                .toUpperCase()}
             </Text>
           </View>
-          <Text style={styles.headerTitle}>{otherUser.displayName || otherUser.username || otherUser.email}</Text>
+          <Text style={styles.headerTitle}>
+            {otherUser.displayName || otherUser.username || otherUser.email}
+          </Text>
         </View>
-        <View style={styles.placeholder} />
+        <View style={{ width: 60 }} />
       </View>
-      
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        renderItem={renderMessage}
-        keyExtractor={item => item.id}
-        style={styles.messagesList}
-        inverted
-        showsVerticalScrollIndicator={false}
-      />
-      
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+
+      {/* Chat + Input */}
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior='padding'
+        // push content above both header and the tab bar
+        keyboardVerticalOffset={HEADER_OFFSET + TABBAR_HEIGHT}
       >
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.textInput}
-            value={message}
-            onChangeText={setMessage}
-            placeholder="Type a message..."
-            multiline
-            maxLength={1000}
+        <View style={styles.card}>
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            renderItem={renderMessage}
+            keyExtractor={(item) => item.id}
+            inverted
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              paddingBottom: TABBAR_HEIGHT + 12, // keep last items clear of the TabBar
+            }}
           />
-          <TouchableOpacity 
-            style={[styles.sendButton, !message.trim() && styles.sendButtonDisabled]} 
-            onPress={sendMessage}
-            disabled={!message.trim()}
-          >
-            <Text style={styles.sendButtonText}>Send</Text>
-          </TouchableOpacity>
+
+          {/* Input */}
+          <View style={[styles.inputRow, { marginBottom: TABBAR_HEIGHT }]}>
+            <TextInput
+              style={styles.input}
+              value={message}
+              onChangeText={setMessage}
+              placeholder="Type a message..."
+              placeholderTextColor="#555"
+              multiline
+              maxLength={1000}
+            />
+            <TouchableOpacity
+              style={[styles.sendBtn, !message.trim() && styles.sendBtnDisabled]}
+              onPress={sendMessage}
+              disabled={!message.trim()}
+            >
+              <Text style={styles.sendTxt}>Send</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Fixed TabBar (overlays content), so we reserved space above */}
+      <TabBar />
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+    backgroundColor: '#111',
   },
   header: {
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 12,
+    paddingBottom: 12,
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    backgroundColor: '#007bff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#0056b3',
   },
-  backButton: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  headerCenter: {
-    flexDirection: 'row',
+  backBtn: { paddingVertical: 6, paddingHorizontal: 8, backgroundColor: '#2e2e2e', borderRadius: 12 },
+  backTxt: { color: '#fff', fontWeight: '600' },
+  headerCenter: { flexDirection: 'row', alignItems: 'center' },
+  avatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: ACCENT,
     alignItems: 'center',
-    flex: 1,
     justifyContent: 'center',
-  },
-  userAvatar: {
-    width: 35,
-    height: 35,
-    borderRadius: 17.5,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
     marginRight: 10,
   },
-  userAvatarText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  headerTitle: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  placeholder: {
-    width: 50,
-  },
-  messagesList: {
+  avatarText: { color: '#000', fontWeight: 'bold' },
+  headerTitle: { color: ACCENT, fontSize: 16, fontWeight: 'bold' },
+
+  card: {
     flex: 1,
-    paddingHorizontal: 15,
-    paddingTop: 10,
+    backgroundColor: '#2e2e2e',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 8,
   },
-  dateSeparator: {
-    alignItems: 'center',
-    marginVertical: 15,
-  },
+
+  dateSeparator: { alignItems: 'center', marginVertical: 10 },
   dateText: {
-    backgroundColor: 'rgba(0,0,0,0.1)',
-    color: '#666',
+    backgroundColor: '#1e1e1e',
+    color: '#bbb',
     fontSize: 12,
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 12,
   },
-  messageContainer: {
-    marginVertical: 2,
+
+  bubble: {
+    marginVertical: 3,
     maxWidth: '80%',
     padding: 12,
     borderRadius: 16,
   },
-  myMessage: {
-    backgroundColor: '#007bff',
+  myBubble: {
     alignSelf: 'flex-end',
-    borderBottomRightRadius: 4,
+    backgroundColor: ACCENT,
+    borderBottomRightRadius: 6,
   },
-  otherMessage: {
-    backgroundColor: 'white',
+  otherBubble: {
     alignSelf: 'flex-start',
-    borderBottomLeftRadius: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    backgroundColor: '#3b3b3b',
+    borderBottomLeftRadius: 6,
   },
-  messageText: {
-    fontSize: 16,
-    lineHeight: 20,
-  },
-  myMessageText: {
-    color: 'white',
-  },
-  otherMessageText: {
-    color: '#333',
-  },
-  timeText: {
-    fontSize: 11,
-    marginTop: 4,
-  },
-  myTimeText: {
-    color: 'rgba(255,255,255,0.7)',
-    textAlign: 'right',
-  },
-  otherTimeText: {
-    color: '#999',
-  },
-  inputContainer: {
+  msgText: { fontSize: 16, lineHeight: 20 },
+  myText: { color: '#000' },
+  otherText: { color: '#fff' },
+  timeText: { fontSize: 11, marginTop: 4 },
+  myTime: { color: '#111', textAlign: 'right' },
+  otherTime: { color: '#ccc' },
+
+  inputRow: {
     flexDirection: 'row',
-    paddingHorizontal: 15,
+    paddingHorizontal: 10,
     paddingVertical: 10,
-    backgroundColor: 'white',
     alignItems: 'flex-end',
-    borderTopWidth: 1,
-    borderTopColor: '#e1e5e9',
   },
-  textInput: {
+  input: {
     flex: 1,
-    borderWidth: 1,
-    borderColor: '#e1e5e9',
+    backgroundColor: '#ccc',
     borderRadius: 20,
-    paddingHorizontal: 15,
+    paddingHorizontal: 14,
     paddingVertical: 10,
     marginRight: 10,
-    maxHeight: 100,
-    fontSize: 16,
+    color: '#000',
+    maxHeight: 120,
   },
-  sendButton: {
-    backgroundColor: '#007bff',
+  sendBtn: {
+    backgroundColor: ACCENT,
     borderRadius: 20,
-    paddingHorizontal: 20,
+    paddingHorizontal: 18,
     paddingVertical: 10,
   },
-  sendButtonDisabled: {
-    backgroundColor: '#6c757d',
-  },
-  sendButtonText: {
-    color: 'white',
-    fontWeight: '600',
-    fontSize: 16,
-  },
+  sendBtnDisabled: { opacity: 0.5 },
+  sendTxt: { color: '#000', fontWeight: '700' },
 });
 
 export default DirectChatScreen;
