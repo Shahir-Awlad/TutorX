@@ -24,14 +24,15 @@ import { Ionicons } from '@expo/vector-icons';
 export default function Signup() {
   const [accountType, setAccountType] = useState('Teacher');
   const [username, setUsername] = useState('');
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPass, setConfirmPass] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  //Error Variables
   const [usernameError, setUsernameError] = useState('');
+  const [nameError, setNameError] = useState('');
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
 
@@ -47,8 +48,9 @@ export default function Signup() {
     setUsernameError('');
     setEmailError('');
 
-    if (!username || !email || !password || !confirmPass) {
+    if (!username || !name || !email || !password || !confirmPass) {
       if(!username) setUsernameError('Username is required');
+      if(!name) setNameError('Name is required');
       if(!email) setEmailError('Email is required');
       if(!password || !confirmPass) setPasswordError('Password is required');
       
@@ -79,6 +81,7 @@ export default function Signup() {
             email: email,
             username: username,
             type: accountType,
+            name: name,
             //uid: user.uid,
             phoneNumber: null,
             gender: null,
@@ -170,6 +173,21 @@ export default function Signup() {
         {emailError ? <View>
           <Text style={styles.errorText}>{emailError}</Text>
         </View> : null}
+
+        <View style={styles.inputBox}>
+          <Ionicons name="person-circle" size={18} color="black" style={styles.icon} />
+          <TextInput
+            placeholder="Full Name"
+            value={name}
+            onChangeText={setName}
+            style={styles.input}
+            placeholderTextColor="#333"
+          />
+        </View>
+
+         {nameError ? <View>
+          <Text style={styles.errorText}>{nameError}</Text>
+         </View> : null}
 
         <View style={styles.inputBox}>
           <Ionicons name="lock-closed" size={18} color="black" style={styles.icon} />

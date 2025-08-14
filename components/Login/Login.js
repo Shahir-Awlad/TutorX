@@ -47,7 +47,7 @@ export default function Login ({onLoginSuccess}) {
         setPassword('');
         console.log("Login success:", user.email);
         //onLoginSuccess();
-        navigation.replace('Conversations');
+        navigation.replace('Mainpage');
       })
       .catch(error => {
         if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-email') {
