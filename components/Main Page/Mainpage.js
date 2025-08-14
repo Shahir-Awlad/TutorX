@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -428,3 +429,4 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 });
+
