@@ -33,16 +33,16 @@ export default function Profile() {
     imageUrl: null,
     gender: '',
     type: '',
-    
+    name: '',
   });
 
   const [editingField, setEditingField] = useState(null);
   const [tempValue, setTempValue] = useState('');
 
-  // Error states
   const [phoneError, setPhoneError] = useState('');
   const [nationalityError, setNationalityError] = useState('');
   const [genderError, setGenderError] = useState('');
+   const [nameError, setnameError] = useState('');
 
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [birthDate, setBirthDate] = useState(null);
@@ -51,7 +51,6 @@ export default function Profile() {
 
   const navigation = useNavigation();
 
-  // Load user data from Firestore
   const loadUserData = async () => {
     try {
       const q = query(collection(db, 'Users'), where('username', '==', userData.username));
@@ -60,11 +59,11 @@ export default function Profile() {
       if (!querySnapshot.empty) {
         const userDoc = querySnapshot.docs[0];
         const data = userDoc.data();
-        
-        // Set data with appropriate placeholders for null values
+
         setUserData({
           username: data.username || '',
           email: data.email || '',
+          name: data.name || '',
           phoneNumber: data.phoneNumber || null,
           nationality: data.nationality || null,
           imageUrl: data.imageUrl || null,
@@ -193,11 +192,9 @@ export default function Profile() {
   };
 
   const handleEditBirthDate = () => {
-    setTempBirthDate(birthDate || new Date()); // Initialize with current date or now
-    setShowDatePicker(true); // Show the date picker immediately
-  };
-
-  // Start editing a field
+    setTempBirthDate(birthDate || new Date()); 
+    setShowDatePicker(true);
+  }
   const handleStartEditing = (field, currentValue) => {
     if (field === 'email') {
       Alert.alert('Info', 'Email cannot be edited as it\'s used for authentication');
@@ -209,7 +206,6 @@ export default function Profile() {
     setNationalityError('');
   };
 
-  // Cancel editing
   const handleCancelEditing = () => {
     setEditingField(null);
     setTempValue('');
@@ -223,23 +219,22 @@ export default function Profile() {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1 }}
+      style={{ flex: 1, backgroundColor: '#000' }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 20}
     >
       <ScrollView
-        contentContainerStyle={{ flexGrow: 1 }}
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: 90, backgroundColor: '#000' }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         <SafeAreaView style={styles.safeArea}>
           <StatusBar barStyle="light-content" backgroundColor="#000" />
-          
-          {/* Header with decorative elements */}
+          +
           <View style={styles.headerContainer}>
             <View style={styles.decorativeCircleLarge} />
             <View style={styles.decorativeCircleSmall} />
-            <View style={styles.decorativeCircleSmallRed} />
+            {/* <View style={styles.decorativeCircleSmallRed} /> */}
             
             {/* Profile Image */}
             <View style={styles.profileImageContainer}>
@@ -271,7 +266,50 @@ export default function Profile() {
                 <Text style={styles.fieldText}>{userData.email || 'No email'}</Text>
               </View>
             </View>
+                
+            {/* Name Field */}
+            <Text style={styles.fieldLabel}>Name</Text>
 
+            <View style={styles.fieldContainer}>
+              
+              {editingField === 'name' ? (
+                <View style={styles.editContainer}>
+                  <Ionicons name="person-circle-outline" size={18} color="#C1FF72" style={styles.inputIcon} />
+                  <TextInput
+                    placeholder="Enter your name"
+                    value={tempValue}
+                    onChangeText={setTempValue}
+                    style={styles.editInput}
+                    placeholderTextColor="#e8e8e8ff"
+                    autoFocus
+                  />
+                  <View style={styles.editActions}>
+                    <TouchableOpacity onPress={handleSaveChanges}>
+                      <Ionicons name="checkmark-circle" size={22} marginRight={8} color="#5ce747ff" />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={handleCancelEditing}>
+                      <Ionicons name="close-circle" size={22} color="#F54D4D" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.fieldValueContainer}>
+                  <Ionicons name="person-circle-outline" size={18} color="#C1FF72" style={styles.inputIcon} />
+                  <Text style={styles.fieldText}>
+                    {userData.name || 'Add your name'}
+                  </Text>
+                  <TouchableOpacity 
+                    onPress={() => handleStartEditing('name', userData.name)}
+                    style={styles.editButton}
+                  >
+                    {/* <Ionicons name="create-outline" size={22} color="#C1FF72" /> */}
+                    <Feather name="edit-2" size={22} color="#C1FF72" />
+                  </TouchableOpacity>
+                </View>
+              )}
+              {nameError && <Text style={styles.errorText}>{nameError}</Text>}
+            </View>
+            
             {/* Phone Number Field */}
             <Text style={styles.fieldLabel}>Phone Number</Text>
 
@@ -396,62 +434,6 @@ export default function Profile() {
                 </View>
               )}
             </View>
-
-            {/* <Text style={styles.fieldLabel}>Date of Birth</Text>
-            <View style={styles.fieldContainer}>
-              {editingBirthDate ? (
-                <View style={styles.editContainer}>
-                  <MaterialIcons name="event" size={18} color="#C1FF72" style={styles.inputIcon} />
-                  <Text style={styles.editInput}>
-                    {tempBirthDate ? tempBirthDate.toLocaleDateString() : 'Select date'}
-                  </Text>
-                  <View style={styles.editActions}>
-                    <TouchableOpacity onPress={handleConfirmBirthDate}>
-                      <Ionicons name="checkmark-circle" size={22} color="#5ce747ff" />
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => {
-                      setEditingBirthDate(false);
-                      setTempBirthDate(null);
-                    }}>
-                      <Ionicons name="close-circle" size={22} color="#F54D4D" />
-                    </TouchableOpacity>
-                  </View>
-                  {showDatePicker && (
-                    <DateTimePicker
-                      value={tempBirthDate || new Date()}
-                      mode="date"
-                      display="default"
-                      onChange={handleDateChange}
-                      maximumDate={new Date()}
-                      themeVariant="dark"
-                    />
-                  )}
-                </View>
-              ) : (
-                <View style={styles.fieldValueContainer}>
-                  <MaterialIcons name="event" size={18} color="#C1FF72" style={styles.inputIcon} />
-                  <Text style={styles.fieldText}>
-                    {birthDate ? birthDate.toLocaleDateString() : 'Add date of birth'}
-                  </Text>
-                  <TouchableOpacity 
-                    onPress={() => setShowDatePicker(true)}
-                    style={styles.editButton}
-                  >
-                    <Feather name="edit-2" size={22} color="#C1FF72" />
-                  </TouchableOpacity>
-                </View>
-              )}
-              {showDatePicker && !editingBirthDate && (
-                <DateTimePicker
-                  value={birthDate || new Date()}
-                  mode="date"
-                  display="default"
-                  onChange={handleDateChange}
-                  maximumDate={new Date()}
-                  themeVariant="dark"
-                />
-              )}
-            </View> */}
 
             <Text style={styles.fieldLabel}>Date of Birth</Text>
             <View style={styles.fieldContainer}>
