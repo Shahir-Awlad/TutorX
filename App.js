@@ -11,6 +11,9 @@ import Tuition from './components/Tuition/Tuition';
 import ConversationsScreen from './components/screens/ConversationsScreen';
 import DirectChatScreen from './components/screens/DirectChatScreen';
 import UserSearchScreen from './components/screens/UserSearchScreen';
+import TuitionsScreen from './components/screens/TuitionsScreen';
+import TuitionDetailScreen from './components/screens/TuitionDetailScreen';
+import AddTuitionScreen from './components/screens/AddTuitionScreen';
 
 import { AuthProvider } from './contexts/AuthContext'; 
 
@@ -28,7 +31,9 @@ export default function App() {
           <Stack.Screen name="Conversations" component={ConversationsScreen} />
           <Stack.Screen name="DirectChat" component={DirectChatScreen} />
           <Stack.Screen name="UserSearch" component={UserSearchScreen} />
-          <Stack.Screen name="Tuition" component={Tuition} />
+          <Stack.Screen name="Tuition" component={TuitionsScreen} />
+          <Stack.Screen name="TuitionDetail" component={TuitionDetailScreen} />
+          <Stack.Screen name="AddTuition" component={AddTuitionScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </AuthProvider>
