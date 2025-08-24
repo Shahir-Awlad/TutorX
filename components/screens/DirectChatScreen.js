@@ -26,7 +26,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import TabBar from '../Navigation/TabBar';
 
 const ACCENT = '#C1FF72';
-const TABBAR_HEIGHT = 70; // <- reserve space equal to your TabBar height
+const TABBAR_HEIGHT = 70; 
 const HEADER_OFFSET = Platform.OS === 'ios' ? 90 : 0;
 
 const DirectChatScreen = ({ route, navigation }) => {
@@ -138,7 +138,6 @@ const DirectChatScreen = ({ route, navigation }) => {
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#111" barStyle="light-content" />
 
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Text style={styles.backTxt}>← Back</Text>
@@ -158,12 +157,9 @@ const DirectChatScreen = ({ route, navigation }) => {
         <View style={{ width: 60 }} />
       </View>
 
-      {/* Chat + Input */}
       <KeyboardAvoidingView
         style={styles.flex}
         behavior='padding'
-        // push content above both header and the tab bar
-        keyboardVerticalOffset={HEADER_OFFSET + TABBAR_HEIGHT}
       >
         <View style={styles.card}>
           <FlatList
@@ -176,12 +172,11 @@ const DirectChatScreen = ({ route, navigation }) => {
             contentContainerStyle={{
               paddingHorizontal: 12,
               paddingVertical: 8,
-              paddingBottom: TABBAR_HEIGHT + 12, // keep last items clear of the TabBar
+              paddingBottom: TABBAR_HEIGHT + 12,
             }}
           />
 
-          {/* Input */}
-          <View style={[styles.inputRow, { marginBottom: TABBAR_HEIGHT }]}>
+          <View style={[styles.inputRow, { marginBottom: Platform.OS === 'ios' ? 40 : TABBAR_HEIGHT}]}>
             <TextInput
               style={styles.input}
               value={message}
@@ -202,7 +197,6 @@ const DirectChatScreen = ({ route, navigation }) => {
         </View>
       </KeyboardAvoidingView>
 
-      {/* Fixed TabBar (overlays content), so we reserved space above */}
       <TabBar />
     </SafeAreaView>
   );

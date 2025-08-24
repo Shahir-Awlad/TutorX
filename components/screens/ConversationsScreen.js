@@ -134,7 +134,6 @@ const ConversationsScreen = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#111" />
-      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Messages</Text>
         <View style={styles.headerActions}>
@@ -187,7 +186,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  headerTitle: { color: ACCENT, fontSize: 18, fontWeight: 'bold' },
+  headerTitle: { color: ACCENT, fontSize: 18, fontWeight: 'bold', marginLeft: 15 },
   headerActions: { flexDirection: 'row', alignItems: 'center' },
   circleBtn: {
     width: 34,
