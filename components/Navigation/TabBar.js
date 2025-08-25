@@ -50,9 +50,9 @@ export default function TabBar() {
           onPress={() => navigation.navigate('Tuition')}
         >
           <Ionicons
-            name={isActive('Tuition') ? 'school' : 'school-outline'}
+            name={isActive('Tuition') || isActive('TuitionDetail') || isActive('AddTuition') ? 'school' : 'school-outline'}
             size={28}
-            color={isActive('Tuition') ? '#C1FF72' : '#acacacff'}
+            color={isActive('Tuition') || isActive('TuitionDetail') || isActive('AddTuition') ? '#C1FF72' : '#acacacff'}
           />
         </TouchableOpacity>
 

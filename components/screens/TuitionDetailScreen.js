@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, StatusBar, Platform, ScrollView, TouchableOpacity } from 'react-native';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
+import { useAuth } from '../../contexts/AuthContext';
+import TabBar from '../Navigation/TabBar';
 
 const ACCENT = '#C1FF72';
 
@@ -9,9 +11,7 @@ function formatDate(d) {
   const date = new Date(d);
   return date.toLocaleDateString([], { month: 'short', day: 'numeric', weekday: 'short' });
 }
-function weekdayName(n) {
-  return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][n] ?? '?';
-}
+function weekdayName(n) { return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][n] ?? '?'; }
 function nextClassDateFromDays(scheduleDays) {
   if (!Array.isArray(scheduleDays) || scheduleDays.length === 0) return null;
   const today = new Date();
@@ -41,6 +41,7 @@ function countScheduledSince(lastPayday, scheduleDays) {
 
 const TuitionDetailScreen = ({ route, navigation }) => {
   const { tuitionId } = route.params;
+  const { user } = useAuth();
   const [tuition, setTuition] = useState(null);
 
   useEffect(() => {
@@ -58,8 +59,11 @@ const TuitionDetailScreen = ({ route, navigation }) => {
       : '—';
     const nextDate = nextClassDateFromDays(tuition.scheduleDays || []);
     const since = countScheduledSince(tuition.lastPayday, tuition.scheduleDays || []);
-    return { subjects, scheduleStr, nextDate, since };
-  }, [tuition]);
+    const iAmTeacher = tuition.teacherId === user?.uid;
+    const counterpartyLabel = iAmTeacher ? 'Student' : 'Teacher';
+    const counterpartyName = iAmTeacher ? (tuition.studentName || '—') : (tuition.teacherName || '—');
+    return { subjects, scheduleStr, nextDate, since, counterpartyLabel, counterpartyName };
+  }, [tuition, user?.uid]);
 
   if (!tuition) {
     return (
@@ -84,7 +88,7 @@ const TuitionDetailScreen = ({ route, navigation }) => {
 
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         <View style={styles.card}>
-          <Row label="Student" value={tuition.studentName || '—'} bold />
+          <Row label={computed.counterpartyLabel} value={computed.counterpartyName} bold />
           <Row label="Address" value={tuition.address || '—'} />
           <Row label="Subjects" value={computed.subjects} />
           <Row label="Scheduled Days" value={computed.scheduleStr} />
@@ -94,6 +98,7 @@ const TuitionDetailScreen = ({ route, navigation }) => {
           <Row label="Last Payday" value={tuition.lastPayday ? formatDate(tuition.lastPayday.toDate ? tuition.lastPayday.toDate() : tuition.lastPayday) : '—'} />
         </View>
       </ScrollView>
+      <TabBar />
     </SafeAreaView>
   );
 };

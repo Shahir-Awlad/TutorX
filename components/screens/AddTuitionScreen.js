@@ -1,18 +1,18 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   SafeAreaView, StatusBar, Platform, ScrollView, Alert,
 } from 'react-native';
-import { addDoc, collection, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp, Timestamp, doc, getDoc } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { useAuth } from '../../contexts/AuthContext';
+import TabBar from '../Navigation/TabBar';
 
 const ACCENT = '#C1FF72';
 const WEEKDAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
 function parseYMD(s) {
-  // expects 'YYYY-MM-DD'
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s.trim());
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec((s || '').trim());
   if (!m) return null;
   const d = new Date(+m[1], +m[2]-1, +m[3]);
   return isNaN(d) ? null : d;
@@ -20,17 +20,37 @@ function parseYMD(s) {
 
 const AddTuitionScreen = ({ navigation }) => {
   const { user } = useAuth();
-  const [studentName, setStudentName] = useState('');
+
+  const [role, setRole] = useState('Teacher'); // default
+  const [counterpartyName, setCounterpartyName] = useState(''); // studentName if Teacher, teacherName if Student
   const [address, setAddress] = useState('');
   const [subjectsText, setSubjectsText] = useState('');
-  const [scheduleDays, setScheduleDays] = useState([]); // array of 0..6
+  const [scheduleDays, setScheduleDays] = useState([]); // [0..6]
   const [classesPerPayday, setClassesPerPayday] = useState('12');
+
   const todayStr = useMemo(() => {
-    const d = new Date(); const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), da=String(d.getDate()).padStart(2,'0');
+    const d = new Date();
+    const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), da = String(d.getDate()).padStart(2,'0');
     return `${y}-${m}-${da}`;
   }, []);
   const [lastPaydayStr, setLastPaydayStr] = useState(todayStr);
   const [saving, setSaving] = useState(false);
+
+  // detect current user's role from Users/{uid}.type
+  useEffect(() => {
+    let ignore = false;
+    (async () => {
+      if (!user?.uid) return;
+      try {
+        const snap = await getDoc(doc(db, 'Users', user.uid));
+        const t = snap.exists() ? snap.data()?.type : null;
+        if (!ignore) setRole(t === 'Student' ? 'Student' : 'Teacher');
+      } catch {
+        if (!ignore) setRole('Teacher');
+      }
+    })();
+    return () => { ignore = true; };
+  }, [user?.uid]);
 
   const toggleDay = (i) => {
     setScheduleDays((prev) => prev.includes(i) ? prev.filter(x => x!==i) : [...prev, i].sort());
@@ -38,25 +58,45 @@ const AddTuitionScreen = ({ navigation }) => {
 
   const onSave = async () => {
     if (!user?.uid) return;
-    if (!studentName.trim()) { Alert.alert('Missing', 'Please enter a student name.'); return; }
-    if (scheduleDays.length === 0) { Alert.alert('Missing', 'Select at least one scheduled day.'); return; }
+
+    if (!counterpartyName.trim()) {
+      Alert.alert('Missing', `Please enter the ${role === 'Student' ? 'teacher' : 'student'} name.`);
+      return;
+    }
+    if (scheduleDays.length === 0) {
+      Alert.alert('Missing', 'Select at least one scheduled day.');
+      return;
+    }
     const lastPaydayDate = parseYMD(lastPaydayStr);
-    if (!lastPaydayDate) { Alert.alert('Invalid date', 'Enter last payday as YYYY-MM-DD.'); return; }
+    if (!lastPaydayDate) {
+      Alert.alert('Invalid date', 'Enter last payday as YYYY-MM-DD.');
+      return;
+    }
+
     const subjects = subjectsText.split(',').map(s => s.trim()).filter(Boolean);
     const count = parseInt(classesPerPayday, 10) || 0;
 
+    const payload = {
+      address: address.trim(),
+      subjects,
+      scheduleDays,
+      classesPerPayday: count,
+      lastPayday: Timestamp.fromDate(lastPaydayDate),
+      createdAt: serverTimestamp(),
+    };
+
+    // store ids & names depending on role
+    if (role === 'Student') {
+      payload.studentId = user.uid;
+      payload.teacherName = counterpartyName.trim();
+    } else {
+      payload.teacherId = user.uid;
+      payload.studentName = counterpartyName.trim();
+    }
+
     setSaving(true);
     try {
-      await addDoc(collection(db, 'tuitions'), {
-        teacherId: user.uid,
-        studentName: studentName.trim(),
-        address: address.trim(),
-        subjects,
-        scheduleDays,                 // [0..6]
-        classesPerPayday: count,      // integer
-        lastPayday: Timestamp.fromDate(lastPaydayDate),
-        createdAt: serverTimestamp(),
-      });
+      await addDoc(collection(db, 'tuitions'), payload);
       navigation.goBack();
     } catch (e) {
       console.error('Add tuition error', e);
@@ -65,6 +105,8 @@ const AddTuitionScreen = ({ navigation }) => {
       setSaving(false);
     }
   };
+
+  const counterpartLabel = role === 'Student' ? 'Teacher Name' : 'Student Name';
 
   return (
     <SafeAreaView style={styles.container}>
@@ -80,8 +122,14 @@ const AddTuitionScreen = ({ navigation }) => {
 
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 30 }}>
         <View style={styles.card}>
-          <Field label="Student Name">
-            <TextInput style={styles.input} value={studentName} onChangeText={setStudentName} placeholder="e.g., Ayaan Rahman" placeholderTextColor="#555" />
+          <Field label={counterpartLabel}>
+            <TextInput
+              style={styles.input}
+              value={counterpartyName}
+              onChangeText={setCounterpartyName}
+              placeholder={role === 'Student' ? 'e.g., Ms. Rahman' : 'e.g., Ayaan Rahman'}
+              placeholderTextColor="#555"
+            />
           </Field>
 
           <Field label="Address">
@@ -133,6 +181,7 @@ const AddTuitionScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
       </ScrollView>
+      <TabBar />
     </SafeAreaView>
   );
 };
