@@ -1,17 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  FlatList,
-  SafeAreaView,
-  StatusBar,
-  Platform,
+  View, Text, StyleSheet, TouchableOpacity, FlatList,
+  SafeAreaView, StatusBar, Platform,
 } from 'react-native';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, doc, getDoc } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { useAuth } from '../../contexts/AuthContext';
+import TabBar from '../Navigation/TabBar';
 
 const ACCENT = '#C1FF72';
 
@@ -19,8 +14,6 @@ function formatDate(d) {
   const date = new Date(d);
   return date.toLocaleDateString([], { month: 'short', day: 'numeric', weekday: 'short' });
 }
-
-// scheduleDays = [0..6] (Sun=0). Find next upcoming date from today.
 function nextClassDateFromDays(scheduleDays) {
   if (!Array.isArray(scheduleDays) || scheduleDays.length === 0) return null;
   const today = new Date();
@@ -32,8 +25,6 @@ function nextClassDateFromDays(scheduleDays) {
   }
   return null;
 }
-
-// Count how many scheduled class days occurred since lastPayday (exclusive) up to today (inclusive)
 function countScheduledSince(lastPayday, scheduleDays) {
   if (!lastPayday || !Array.isArray(scheduleDays) || scheduleDays.length === 0) return 0;
   const start = new Date(lastPayday.toDate ? lastPayday.toDate() : lastPayday);
@@ -42,7 +33,7 @@ function countScheduledSince(lastPayday, scheduleDays) {
   const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   let count = 0;
   const cursor = new Date(s);
-  cursor.setDate(s.getDate() + 1); // after last payday
+  cursor.setDate(s.getDate() + 1);
   while (cursor <= t) {
     if (scheduleDays.includes(cursor.getDay())) count++;
     cursor.setDate(cursor.getDate() + 1);
@@ -52,20 +43,45 @@ function countScheduledSince(lastPayday, scheduleDays) {
 
 const TuitionsScreen = ({ navigation }) => {
   const { user } = useAuth();
+  const [role, setRole] = useState('Teacher'); // default to Teacher
   const [tuitions, setTuitions] = useState([]);
 
+  // fetch user role from Users/{uid}.type
   useEffect(() => {
-    if (!user?.uid) return;
-    const q = query(collection(db, 'tuitions'), where('teacherId', '==', user.uid));
-    const unsub = onSnapshot(q, (snap) => {
-      const list = [];
-      snap.forEach((doc) => list.push({ id: doc.id, ...doc.data() }));
-      setTuitions(list);
-    });
-    return unsub;
+    let ignore = false;
+    (async () => {
+      if (!user?.uid) return;
+      try {
+        const snap = await getDoc(doc(db, 'Users', user.uid));
+        const t = snap.exists() ? snap.data()?.type : null;
+        if (!ignore) setRole(t === 'Student' ? 'Student' : 'Teacher');
+      } catch {
+        if (!ignore) setRole('Teacher');
+      }
+    })();
+    return () => { ignore = true; };
   }, [user?.uid]);
 
+  // subscribe to tuitions for this user depending on role
+  useEffect(() => {
+    if (!user?.uid) return;
+    const field = role === 'Student' ? 'studentId' : 'teacherId';
+    const qy = query(collection(db, 'tuitions'), where(field, '==', user.uid));
+    const unsub = onSnapshot(qy, (snap) => {
+      const list = [];
+      snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
+      setTuitions(list);
+    }, (e) => console.log('tuitions listener error', e));
+    return unsub;
+  }, [user?.uid, role]);
+
+  const counterpartLabel = role === 'Student' ? 'Teacher' : 'Student';
+
   const renderItem = ({ item }) => {
+    const name = role === 'Student'
+      ? (item.teacherName || 'Unnamed teacher')
+      : (item.studentName || 'Unnamed student');
+
     const subjects = Array.isArray(item.subjects) ? item.subjects.join(', ') : item.subjects || '—';
     const nextDate = nextClassDateFromDays(item.scheduleDays || []);
     const classesSince = countScheduledSince(item.lastPayday, item.scheduleDays || []);
@@ -77,10 +93,13 @@ const TuitionsScreen = ({ navigation }) => {
         onPress={() => navigation.navigate('TuitionDetail', { tuitionId: item.id })}
       >
         <View style={styles.cardHeader}>
-          <Text style={styles.studentName}>{item.studentName || 'Unnamed student'}</Text>
-          <Text style={styles.counter}>
-            {classesSince}/{totalForPayday}
-          </Text>
+          <Text style={styles.studentName}>{name}</Text>
+          <Text style={styles.counter}>{classesSince}/{totalForPayday}</Text>
+        </View>
+
+        <View style={styles.row}>
+          <Text style={styles.label}>{counterpartLabel}:</Text>
+          <Text style={styles.value} numberOfLines={1}>{name}</Text>
         </View>
 
         <View style={styles.row}>
@@ -104,7 +123,6 @@ const TuitionsScreen = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#111" />
-
       <View style={styles.header}>
         <Text style={styles.headerTitle}>My Tuitions</Text>
       </View>
@@ -117,20 +135,20 @@ const TuitionsScreen = ({ navigation }) => {
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text style={styles.emptyTitle}>No tuitions yet</Text>
-            <Text style={styles.emptyText}>Tap the + button to add your first tuition</Text>
+            <Text style={styles.emptyText}>Tap the + button to add a tuition</Text>
           </View>
         }
         showsVerticalScrollIndicator={false}
       />
 
-      {/* FAB */}
       <TouchableOpacity
         style={styles.fab}
-        onPress={() => navigation.navigate('AddTuition')}
+        onPress={() => navigation.navigate('AddTuition', { role })}
         activeOpacity={0.85}
       >
         <Text style={styles.fabPlus}>＋</Text>
       </TouchableOpacity>
+      <TabBar />
     </SafeAreaView>
   );
 };
@@ -140,12 +158,7 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: 16, paddingVertical: 14 },
   headerTitle: { color: ACCENT, fontSize: 18, fontWeight: 'bold' },
 
-  card: {
-    backgroundColor: '#2e2e2e',
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 12,
-  },
+  card: { backgroundColor: '#2e2e2e', borderRadius: 16, padding: 14, marginBottom: 12 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
   studentName: { color: '#fff', fontSize: 16, fontWeight: '700' },
   counter: { color: '#000', backgroundColor: ACCENT, borderRadius: 16, overflow: 'hidden', paddingHorizontal: 10, paddingVertical: 4, fontWeight: '700' },
@@ -158,12 +171,7 @@ const styles = StyleSheet.create({
   emptyTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginBottom: 6 },
   emptyText: { color: '#bbb', fontSize: 14, textAlign: 'center' },
 
-  fab: {
-    position: 'absolute', right: 20, bottom: 24,
-    width: 56, height: 56, borderRadius: 28,
-    backgroundColor: ACCENT, alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 6, elevation: 6,
-  },
+  fab: { position: 'absolute', right: 20, bottom: 95, width: 56, height: 56, borderRadius: 28, backgroundColor: ACCENT, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 6, elevation: 6 },
   fabPlus: { color: '#000', fontSize: 28, fontWeight: '900', marginTop: -2 },
 });
 
