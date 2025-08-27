@@ -18,21 +18,31 @@ const TuitionDetailScreen = ({ route, navigation }) => {
   const [tuition, setTuition] = useState(null);
   const [counterparty, setCounterparty] = useState(null);
 
-  useEffect(() => {
+    useEffect(() => {
     if (!tuitionId || !ownerUid) return;
     const ref = doc(db, 'Users', ownerUid, 'tuitions', tuitionId);
     const unsub = onSnapshot(ref, async (snap) => {
       const data = { id: snap.id, ...snap.data() };
       setTuition(data);
 
-      // fetch counterparty user profile (if present)
-      if (data?.counterpartyUid) {
-        const prof = await getDoc(doc(db, 'Users', data.counterpartyUid));
+      // Figure out who the "other" person is:
+      let cpUid = data?.counterpartyUid;
+      if (!cpUid) {
+        // Fallback: compute from teacherId/studentId relative to current viewer
+        cpUid = (data.teacherId === user?.uid) ? data.studentId : data.teacherId;
+      }
+
+      if (cpUid) {
+        const prof = await getDoc(doc(db, 'Users', cpUid));
         if (prof.exists()) setCounterparty({ uid: prof.id, ...prof.data() });
+        else setCounterparty(null);
+      } else {
+        setCounterparty(null);
       }
     });
     return unsub;
-  }, [tuitionId, ownerUid]);
+  }, [tuitionId, ownerUid, user?.uid]);
+
 
   const computed = useMemo(() => {
     if (!tuition) return {};

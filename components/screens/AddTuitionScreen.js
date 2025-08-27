@@ -94,7 +94,7 @@ const AddTuitionScreen = ({ navigation }) => {
     setScheduleDays((prev) => prev.includes(i) ? prev.filter(x => x!==i) : [...prev, i].sort());
   };
 
-  const onSave = async () => {
+    const onSave = async () => {
     if (!user?.uid) return;
 
     if (!selected) {
@@ -111,7 +111,6 @@ const AddTuitionScreen = ({ navigation }) => {
       return;
     }
 
-    // Build shared payload
     const subjects = subjectsText.split(',').map(s => s.trim()).filter(Boolean);
     const payloadBase = {
       subjects,
@@ -121,7 +120,6 @@ const AddTuitionScreen = ({ navigation }) => {
       salary: parseFloat(salary) || 0,
       lastPayday: Timestamp.fromDate(lastPaydayDate),
       createdAt: serverTimestamp(),
-      counterpartyUid: selected.uid,
     };
 
     setSaving(true);
@@ -129,11 +127,12 @@ const AddTuitionScreen = ({ navigation }) => {
       const batch = writeBatch(db);
       const sharedKey = `${user.uid}_${selected.uid}_${Date.now()}`;
 
-      // Me
+      // ----- MY COPY
       const myDocRef = doc(collection(db, 'Users', user.uid, 'tuitions'));
       const myDoc = {
         ...payloadBase,
         sharedKey,
+        counterpartyUid: selected.uid,          // I see THEM
         teacherId: role === 'Teacher' ? user.uid : selected.uid,
         studentId: role === 'Teacher' ? selected.uid : user.uid,
         teacherName: role === 'Teacher' ? (user.displayName || '') : (selected.name || ''),
@@ -142,11 +141,12 @@ const AddTuitionScreen = ({ navigation }) => {
       };
       batch.set(myDocRef, myDoc);
 
-      // Them
+      // ----- THEIR COPY
       const theirDocRef = doc(collection(db, 'Users', selected.uid, 'tuitions'));
       const theirDoc = {
         ...payloadBase,
         sharedKey,
+        counterpartyUid: user.uid,               // <<< FIX: THEY should see ME
         teacherId: role === 'Teacher' ? user.uid : selected.uid,
         studentId: role === 'Teacher' ? selected.uid : user.uid,
         teacherName: role === 'Teacher' ? (user.displayName || '') : (selected.name || ''),
@@ -164,6 +164,7 @@ const AddTuitionScreen = ({ navigation }) => {
       setSaving(false);
     }
   };
+
 
   const counterpartLabel = role === 'Student' ? 'Teacher' : 'Student';
 
