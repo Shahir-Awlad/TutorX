@@ -4,7 +4,7 @@ import {
   SafeAreaView, StatusBar, Platform, ScrollView, Alert
 } from 'react-native';
 import {
-  addDoc, collection, serverTimestamp, Timestamp,
+  collection, serverTimestamp, Timestamp,
   doc, getDoc, query, where, getDocs, writeBatch
 } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
@@ -23,16 +23,19 @@ function parseYMD(s) {
 const AddTuitionScreen = ({ navigation }) => {
   const { user } = useAuth();
 
-  // role & selected counterparty
-  const [role, setRole] = useState('Teacher');      // fetched from Users/{uid}.type
+  // my role & my profile (for reliable name fallbacks)
+  const [role, setRole] = useState('Teacher');
+  const [me, setMe] = useState({ name: '', username: '', email: '' });
+
+  // search target
   const [search, setSearch] = useState('');
-  const [results, setResults] = useState([]);       // array of small items (we will map, not FlatList)
-  const [selected, setSelected] = useState(null);   // {uid, name, username, email, type}
+  const [results, setResults] = useState([]);
+  const [selected, setSelected] = useState(null);   // {uid,name,username,email,type}
 
   // tuition fields
   const [salary, setSalary] = useState('');
   const [subjectsText, setSubjectsText] = useState('');
-  const [scheduleDays, setScheduleDays] = useState([]); // [0..6]
+  const [scheduleDays, setScheduleDays] = useState([]);
   const [classesPerPayday, setClassesPerPayday] = useState('12');
   const [classesSincePayday, setClassesSincePayday] = useState('0');
 
@@ -44,23 +47,40 @@ const AddTuitionScreen = ({ navigation }) => {
   const [lastPaydayStr, setLastPaydayStr] = useState(todayStr);
   const [saving, setSaving] = useState(false);
 
-  // Load my role
+  // Load my role + my profile (name/username/email) from Users/{uid}
   useEffect(() => {
     let ignore = false;
     (async () => {
       if (!user?.uid) return;
       try {
         const snap = await getDoc(doc(db, 'Users', user.uid));
-        const t = snap.exists() ? snap.data()?.type : null;
-        if (!ignore) setRole(t === 'Student' ? 'Student' : 'Teacher');
+        if (snap.exists()) {
+          const d = snap.data();
+          if (!ignore) {
+            setRole(d?.type === 'Student' ? 'Student' : 'Teacher');
+            setMe({
+              name: d?.name || '',
+              username: d?.username || '',
+              email: d?.email || user.email || '',
+            });
+          }
+        } else {
+          if (!ignore) {
+            setRole('Teacher');
+            setMe({ name: '', username: '', email: user.email || '' });
+          }
+        }
       } catch {
-        if (!ignore) setRole('Teacher');
+        if (!ignore) {
+          setRole('Teacher');
+          setMe({ name: '', username: '', email: user.email || '' });
+        }
       }
     })();
     return () => { ignore = true; };
   }, [user?.uid]);
 
-  // Search by exact username OR exact email
+  // Search by exact username OR exact email in Users
   const runSearch = async () => {
     if (!search.trim()) { setResults([]); return; }
     try {
@@ -91,10 +111,10 @@ const AddTuitionScreen = ({ navigation }) => {
   };
 
   const toggleDay = (i) => {
-    setScheduleDays((prev) => prev.includes(i) ? prev.filter(x => x!==i) : [...prev, i].sort());
+    setScheduleDays(prev => prev.includes(i) ? prev.filter(x => x !== i) : [...prev, i].sort());
   };
 
-    const onSave = async () => {
+  const onSave = async () => {
     if (!user?.uid) return;
 
     if (!selected) {
@@ -111,8 +131,9 @@ const AddTuitionScreen = ({ navigation }) => {
       return;
     }
 
+    // Common payload
     const subjects = subjectsText.split(',').map(s => s.trim()).filter(Boolean);
-    const payloadBase = {
+    const base = {
       subjects,
       scheduleDays,
       classesPerPayday: parseInt(classesPerPayday, 10) || 0,
@@ -122,38 +143,45 @@ const AddTuitionScreen = ({ navigation }) => {
       createdAt: serverTimestamp(),
     };
 
+    // Solid name fallbacks
+    const myName     = me.name || me.username || me.email || user.displayName || user.uid;
+    const otherName  = selected.name || selected.username || selected.email || selected.uid;
+
+    const teacherId   = role === 'Teacher' ? user.uid : selected.uid;
+    const studentId   = role === 'Teacher' ? selected.uid : user.uid;
+    const teacherName = (teacherId === user.uid) ? myName : otherName;
+    const studentName = (studentId === user.uid) ? myName : otherName;
+
     setSaving(true);
     try {
       const batch = writeBatch(db);
       const sharedKey = `${user.uid}_${selected.uid}_${Date.now()}`;
 
-      // ----- MY COPY
-      const myDocRef = doc(collection(db, 'Users', user.uid, 'tuitions'));
-      const myDoc = {
-        ...payloadBase,
+      // Mine → I should see THEM
+      const myRef = doc(collection(db, 'Users', user.uid, 'tuitions'));
+      batch.set(myRef, {
+        ...base,
         sharedKey,
-        counterpartyUid: selected.uid,          // I see THEM
-        teacherId: role === 'Teacher' ? user.uid : selected.uid,
-        studentId: role === 'Teacher' ? selected.uid : user.uid,
-        teacherName: role === 'Teacher' ? (user.displayName || '') : (selected.name || ''),
-        studentName: role === 'Teacher' ? (selected.name || '') : (user.displayName || ''),
         ownerUid: user.uid,
-      };
-      batch.set(myDocRef, myDoc);
+        counterpartyUid: selected.uid,
+        teacherId,
+        studentId,
+        teacherName,
+        studentName,
+      });
 
-      // ----- THEIR COPY
-      const theirDocRef = doc(collection(db, 'Users', selected.uid, 'tuitions'));
-      const theirDoc = {
-        ...payloadBase,
+      // Theirs → they should see ME
+      const theirRef = doc(collection(db, 'Users', selected.uid, 'tuitions'));
+      batch.set(theirRef, {
+        ...base,
         sharedKey,
-        counterpartyUid: user.uid,               // <<< FIX: THEY should see ME
-        teacherId: role === 'Teacher' ? user.uid : selected.uid,
-        studentId: role === 'Teacher' ? selected.uid : user.uid,
-        teacherName: role === 'Teacher' ? (user.displayName || '') : (selected.name || ''),
-        studentName: role === 'Teacher' ? (selected.name || '') : (user.displayName || ''),
         ownerUid: selected.uid,
-      };
-      batch.set(theirDocRef, theirDoc);
+        counterpartyUid: user.uid,
+        teacherId,
+        studentId,
+        teacherName,
+        studentName,
+      });
 
       await batch.commit();
       navigation.goBack();
@@ -164,7 +192,6 @@ const AddTuitionScreen = ({ navigation }) => {
       setSaving(false);
     }
   };
-
 
   const counterpartLabel = role === 'Student' ? 'Teacher' : 'Student';
 
@@ -181,7 +208,7 @@ const AddTuitionScreen = ({ navigation }) => {
         <View style={{ width: 60 }} />
       </View>
 
-      {/* NOTE: No FlatList inside this ScrollView */}
+      {/* No FlatList inside this ScrollView */}
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 30 }}>
         <View style={styles.card}>
           {/* Search & pick user */}
@@ -202,7 +229,7 @@ const AddTuitionScreen = ({ navigation }) => {
 
           {!!results.length && !selected && (
             <View style={{ marginTop: 8 }}>
-              {results.map((item) => (
+              {results.map(item => (
                 <TouchableOpacity key={item.uid} style={styles.resultItem} onPress={() => setSelected(item)}>
                   <Text style={styles.resultName}>{item.name || '(no name)'}</Text>
                   <Text style={styles.resultMeta}>@{item.username} • {item.email}</Text>
