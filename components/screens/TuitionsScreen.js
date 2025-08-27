@@ -7,12 +7,10 @@ import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { useAuth } from '../../contexts/AuthContext';
 
-
 function formatDate(d) {
   const date = new Date(d);
   return date.toLocaleDateString([], { month: 'short', day: 'numeric', weekday: 'short' });
 }
-
 function nextClassDateFromDays(scheduleDays) {
   if (!Array.isArray(scheduleDays) || scheduleDays.length === 0) return null;
   const today = new Date();
@@ -24,7 +22,6 @@ function nextClassDateFromDays(scheduleDays) {
   }
   return null;
 }
-
 function countScheduledSince(lastPayday, scheduleDays) {
   if (!lastPayday || !Array.isArray(scheduleDays) || scheduleDays.length === 0) return 0;
   const start = new Date(lastPayday.toDate ? lastPayday.toDate() : lastPayday);
@@ -57,7 +54,7 @@ const TuitionsScreen = ({ navigation }) => {
   }, [user?.uid]);
 
   const renderItem = ({ item }) => {
-    const iAmTeacher = item.teacherId === user?.uid; // creator is the owner
+    const iAmTeacher = item.teacherId === user?.uid;
     const name = iAmTeacher ? (item.studentName || 'Unnamed student')
                             : (item.teacherName || 'Unnamed teacher');
     const subjects = Array.isArray(item.subjects) ? item.subjects.join(', ') : item.subjects || '—';
@@ -71,7 +68,7 @@ const TuitionsScreen = ({ navigation }) => {
         onPress={() => navigation.navigate('TuitionDetail', { tuitionId: item.id, ownerUid: user.uid })}
       >
         <View style={styles.cardHeader}>
-          <Text style={styles.studentName}>{name}</Text>
+          <Text style={styles.name}>{name}</Text>
           <Text style={styles.counter}>{classesSince}/{totalForPayday}</Text>
         </View>
 
@@ -85,10 +82,12 @@ const TuitionsScreen = ({ navigation }) => {
           <Text style={styles.value}>{nextDate ? formatDate(nextDate) : '—'}</Text>
         </View>
 
-        <View style={styles.row}>
-          <Text style={styles.label}>Since payday:</Text>
-          <Text style={styles.value}>{classesSince} classes</Text>
-        </View>
+        {!!item.salary && (
+          <View style={styles.row}>
+            <Text style={styles.label}>Salary:</Text>
+            <Text style={styles.value}>{String(item.salary)}</Text>
+          </View>
+        )}
       </TouchableOpacity>
     );
   };
@@ -133,7 +132,7 @@ const styles = StyleSheet.create({
 
   card: { backgroundColor: '#2e2e2e', borderRadius: 16, padding: 14, marginBottom: 12 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  studentName: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  name: { color: '#fff', fontSize: 16, fontWeight: '700' },
   counter: { color: '#000', backgroundColor: ACCENT, borderRadius: 16, overflow: 'hidden', paddingHorizontal: 10, paddingVertical: 4, fontWeight: '700' },
 
   row: { flexDirection: 'row', marginTop: 6 },
