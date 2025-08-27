@@ -87,44 +87,44 @@ export default function Profile() {
   const handleDateChange = (event, selectedDate) => {
     setShowDatePicker(false);
     if (selectedDate) {
-      setTempBirthDate(selectedDate); // Store the selected date
-      setEditingBirthDate(true); // Show the confirm/cancel UI
+      setTempBirthDate(selectedDate); 
+      setEditingBirthDate(true); 
     }
   };
 
 
-    const handleConfirmBirthDate = async () => {
-      Alert.alert(
-        'Confirm Changes',
-        'Are you sure you want to update your birth date?',
-        [
-          {
-            text: 'Cancel',
-            style: 'cancel',
-            onPress: () => {
-              setEditingBirthDate(false);
-              setTempBirthDate(null);
-            }
-          },
-          {
-            text: 'Confirm',
-            onPress: async () => {
-              try {
-                await updateDoc(doc(db, 'Users', userData.userId), {
-                  birthDate: Timestamp.fromDate(tempBirthDate)
-                });
-                setBirthDate(tempBirthDate);
-                setEditingBirthDate(false);
-                Alert.alert('Success', 'Birth date updated successfully!');
-              } catch (error) {
-                console.error('Error updating birth date:', error);
-                Alert.alert('Error', 'Failed to update birth date');
-              }
-            }
-          }
-        ]
-      );
-    };
+    // const handleConfirmBirthDate = async () => {
+    //   Alert.alert(
+    //     'Confirm Changes',
+    //     'Are you sure you want to update your birth date?',
+    //     [
+    //       {
+    //         text: 'Cancel',
+    //         style: 'cancel',
+    //         onPress: () => {
+    //           setEditingBirthDate(false);
+    //           setTempBirthDate(null);
+    //         }
+    //       },
+    //       {
+    //         text: 'Confirm',
+    //         onPress: async () => {
+    //           try {
+    //             await updateDoc(doc(db, 'Users', userData.userId), {
+    //               birthDate: Timestamp.fromDate(tempBirthDate)
+    //             });
+    //             setBirthDate(tempBirthDate);
+    //             setEditingBirthDate(false);
+    //             Alert.alert('Success', 'Birth date updated successfully!');
+    //           } catch (error) {
+    //             console.error('Error updating birth date:', error);
+    //             Alert.alert('Error', 'Failed to update birth date');
+    //           }
+    //         }
+    //       }
+    //     ]
+    //   );
+    // };
 
   const handleSaveBirthDate = async (date) => {
     try {
@@ -136,8 +136,8 @@ export default function Profile() {
         birthDate: Timestamp.fromDate(tempBirthDate)
       });
       
-      setBirthDate(tempBirthDate); // Update the displayed date
-      setEditingBirthDate(false); // Hide the confirm/cancel buttons
+      setBirthDate(tempBirthDate); 
+      setEditingBirthDate(false); 
       Alert.alert('Success', 'Birth date updated!');
     } catch (error) {
       console.error('Error updating birth date:', error);
@@ -152,6 +152,7 @@ export default function Profile() {
     if (!tempValue.trim()) {
       if (editingField === 'phoneNumber') setPhoneError('Phone number cannot be empty');
       if (editingField === 'nationality') setNationalityError('Nationality cannot be empty');
+      if (editingField === 'gender') setNationalityError('Gender cannot be empty');
       return;
     }
 
@@ -227,6 +228,7 @@ export default function Profile() {
         contentContainerStyle={{ flexGrow: 1, paddingBottom: 90, backgroundColor: '#000' }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+
       >
         <SafeAreaView style={styles.safeArea}>
           <StatusBar barStyle="light-content" backgroundColor="#000" />
@@ -242,7 +244,7 @@ export default function Profile() {
                 source={
                   userData.imageUrl
                     ? { uri: userData.imageUrl }
-                    : require('../../assets/default_user.jpg') // Add this to your assets
+                    : require('../../assets/default_user.jpg') 
                 }
                 style={styles.profileImage}
                 onError={() => {
@@ -462,7 +464,7 @@ export default function Profile() {
                     {birthDate ? birthDate.toLocaleDateString() : 'Add date of birth'}
                   </Text>
                   <TouchableOpacity 
-                    onPress={handleEditBirthDate}  // Changed to use the new handler
+                    onPress={handleEditBirthDate}  
                     style={styles.editButton}
                   >
                     <Feather name="edit-2" size={22} color="#C1FF72" />
