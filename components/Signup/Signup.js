@@ -17,6 +17,7 @@ import {
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc, query, getDocs, where, collection } from 'firebase/firestore';
 import { auth, db } from '../../firebaseConfig';    
+import DropDownPicker from 'react-native-dropdown-picker';
 
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -34,11 +35,24 @@ export default function Signup() {
   const [institute, setInstitute] = useState('');
   const [studentClass, setStudentClass] = useState('');
 
+  const [openClass, setOpenClass] = useState(false);
+  const [classItems, setClassItems] = useState([
+    { label: 'Play Group', value: 'Play Group' },
+    { label: 'Nursery', value: 'Nursery' },
+    { label: 'KG', value: 'KG' },
+    ...Array.from({ length: 12 }, (_, i) => ({
+      label: `${i + 1}`,
+      value: `${i + 1}`
+    }))
+  ]);
+
 
   const [usernameError, setUsernameError] = useState('');
   const [nameError, setNameError] = useState('');
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [instituteError, setInstituteError] = useState('');
+  const [classError, setClassError] = useState('');
 
 
   const navigation = useNavigation();
@@ -52,12 +66,13 @@ export default function Signup() {
     setUsernameError('');
     setEmailError('');
 
-    if (!username || !name || !email || !password || !confirmPass) {
+    if (!username || !name || !email || !password || !confirmPass || (accountType === 'Student' && (!institute || !studentClass))) {
       if(!username) setUsernameError('Username is required');
       if(!name) setNameError('Name is required');
       if(!email) setEmailError('Email is required');
       if(!password || !confirmPass) setPasswordError('Password is required');
-      
+      if(!institute && accountType === 'Student') setInstituteError('Institute is required');
+      if(!studentClass && accountType === 'Student') setClassError('Class is required');
       return;
     }
     if (accountType === 'Student') {
@@ -101,7 +116,7 @@ export default function Signup() {
             dateOfBirth: null,
             ...(accountType === 'Student' ? { 
               institute: institute || null, 
-              class: parseInt(studentClass, 10) || null
+              class: studentClass || null
             } : {})
         });
         
@@ -251,18 +266,48 @@ export default function Signup() {
               placeholderTextColor="#333"
             />
           </View>
+          
+          {instituteError ? <View>
+          <Text style={styles.errorText}>{instituteError}</Text>
+         </View> : null}
 
           <View style={styles.inputBox}>
             <Ionicons name="book" size={18} color="black" style={styles.icon} />
-            <TextInput
-              placeholder="Class"
+            <DropDownPicker
+              open={openClass}
               value={studentClass}
-              onChangeText={setStudentClass}
-              style={styles.input}
-              keyboardType="numeric"
-              placeholderTextColor="#333"
+              items={classItems}
+              setOpen={setOpenClass}
+              setValue={setStudentClass}
+              setItems={setClassItems}
+              placeholder="Select Class"
+              style={{
+                borderColor: '#ccc',
+                borderWidth: 1,
+                borderRadius: 8,
+                //paddingHorizontal: 10,
+                backgroundColor: '#ccc',
+                width: '92%',
+                height: 28,
+              }}
+              dropDownContainerStyle={{
+                borderWidth: 1,
+                borderColor: '#111',
+                borderRadius: 10,
+                backgroundColor: '#ccc', 
+                width: '92%',
+                maxHeight: 180, 
+              }}
+              listMode="SCROLLVIEW"
+              scrollViewProps={{
+                nestedScrollEnabled: true
+              }}
             />
           </View>
+
+          {classError ? <View>
+          <Text style={styles.errorText}>{classError}</Text>
+         </View> : null}
         </>
       )}
 
