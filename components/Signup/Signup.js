@@ -31,6 +31,10 @@ export default function Signup() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
+  const [institute, setInstitute] = useState('');
+  const [studentClass, setStudentClass] = useState('');
+
+
   const [usernameError, setUsernameError] = useState('');
   const [nameError, setNameError] = useState('');
   const [emailError, setEmailError] = useState('');
@@ -56,6 +60,13 @@ export default function Signup() {
       
       return;
     }
+    if (accountType === 'Student') {
+      if (!institute || !studentClass) {
+        Alert.alert('Error', 'Please fill institute and class for Student account.');
+        return;
+      }
+    }
+
 
     if (password !== confirmPass) {
       setPasswordError('Passwords do not match');
@@ -88,6 +99,10 @@ export default function Signup() {
             imageUrl: null,
             nationality: null,
             dateOfBirth: null,
+            ...(accountType === 'Student' ? { 
+              institute: institute || null, 
+              class: parseInt(studentClass, 10) || null
+            } : {})
         });
         
         Alert.alert('Success', 'Account created! Please log in.');
@@ -223,6 +238,34 @@ export default function Signup() {
             <Ionicons name={showConfirmPassword ? 'eye-off' : 'eye'} size={18} color="black" style={styles.icon} />
           </TouchableOpacity>
         </View>
+
+        {accountType === 'Student' && (
+        <>
+          <View style={styles.inputBox}>
+            <Ionicons name="school" size={18} color="black" style={styles.icon} />
+            <TextInput
+              placeholder="Institute"
+              value={institute}
+              onChangeText={setInstitute}
+              style={styles.input}
+              placeholderTextColor="#333"
+            />
+          </View>
+
+          <View style={styles.inputBox}>
+            <Ionicons name="book" size={18} color="black" style={styles.icon} />
+            <TextInput
+              placeholder="Class"
+              value={studentClass}
+              onChangeText={setStudentClass}
+              style={styles.input}
+              keyboardType="numeric"
+              placeholderTextColor="#333"
+            />
+          </View>
+        </>
+      )}
+
 
         <TouchableOpacity style={styles.signupButton} onPress={handleSignup}>
           <Text style={styles.signupText}>Sign Up</Text>

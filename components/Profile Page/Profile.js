@@ -232,7 +232,7 @@ export default function Profile() {
       >
         <SafeAreaView style={styles.safeArea}>
           <StatusBar barStyle="light-content" backgroundColor="#000" />
-          +
+          
           <View style={styles.headerContainer}>
             <View style={styles.decorativeCircleLarge} />
             <View style={styles.decorativeCircleSmall} />
