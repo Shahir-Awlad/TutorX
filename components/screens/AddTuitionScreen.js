@@ -6,7 +6,6 @@ import {
 import { addDoc, collection, serverTimestamp, Timestamp, doc, getDoc } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { useAuth } from '../../contexts/AuthContext';
-import TabBar from '../Navigation/TabBar';
 
 const ACCENT = '#C1FF72';
 const WEEKDAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -22,7 +21,7 @@ const AddTuitionScreen = ({ navigation }) => {
   const { user } = useAuth();
 
   const [role, setRole] = useState('Teacher'); // default
-  const [counterpartyName, setCounterpartyName] = useState(''); // studentName if Teacher, teacherName if Student
+  const [counterpartyName, setCounterpartyName] = useState('');
   const [address, setAddress] = useState('');
   const [subjectsText, setSubjectsText] = useState('');
   const [scheduleDays, setScheduleDays] = useState([]); // [0..6]
@@ -85,18 +84,18 @@ const AddTuitionScreen = ({ navigation }) => {
       createdAt: serverTimestamp(),
     };
 
-    // store ids & names depending on role
-    if (role === 'Student') {
-      payload.studentId = user.uid;
-      payload.teacherName = counterpartyName.trim();
-    } else {
+    if (role === 'Teacher') {
       payload.teacherId = user.uid;
       payload.studentName = counterpartyName.trim();
+    } else {
+      payload.studentId = user.uid;
+      payload.teacherName = counterpartyName.trim();
     }
 
     setSaving(true);
     try {
-      await addDoc(collection(db, 'tuitions'), payload);
+      const colRef = collection(db, 'Users', user.uid, 'tuitions');
+      await addDoc(colRef, payload);
       navigation.goBack();
     } catch (e) {
       console.error('Add tuition error', e);
@@ -181,7 +180,6 @@ const AddTuitionScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
       </ScrollView>
-      <TabBar />
     </SafeAreaView>
   );
 };

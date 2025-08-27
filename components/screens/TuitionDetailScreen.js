@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, SafeAreaView, StatusBar, Platform, ScrollView, 
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { useAuth } from '../../contexts/AuthContext';
-import TabBar from '../Navigation/TabBar';
 
 const ACCENT = '#C1FF72';
 
@@ -40,16 +39,16 @@ function countScheduledSince(lastPayday, scheduleDays) {
 }
 
 const TuitionDetailScreen = ({ route, navigation }) => {
-  const { tuitionId } = route.params;
+  const { tuitionId, ownerUid } = route.params; // <- owner uid passed from list
   const { user } = useAuth();
   const [tuition, setTuition] = useState(null);
 
   useEffect(() => {
-    if (!tuitionId) return;
-    const ref = doc(db, 'tuitions', tuitionId);
+    if (!tuitionId || !ownerUid) return;
+    const ref = doc(db, 'Users', ownerUid, 'tuitions', tuitionId);
     const unsub = onSnapshot(ref, (snap) => setTuition({ id: snap.id, ...snap.data() }));
     return unsub;
-  }, [tuitionId]);
+  }, [tuitionId, ownerUid]);
 
   const computed = useMemo(() => {
     if (!tuition) return {};
@@ -98,7 +97,6 @@ const TuitionDetailScreen = ({ route, navigation }) => {
           <Row label="Last Payday" value={tuition.lastPayday ? formatDate(tuition.lastPayday.toDate ? tuition.lastPayday.toDate() : tuition.lastPayday) : '—'} />
         </View>
       </ScrollView>
-      <TabBar />
     </SafeAreaView>
   );
 };

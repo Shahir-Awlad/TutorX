@@ -1,19 +1,18 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, FlatList,
   SafeAreaView, StatusBar, Platform,
 } from 'react-native';
-import { collection, onSnapshot, query, where, doc, getDoc } from 'firebase/firestore';
+import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { useAuth } from '../../contexts/AuthContext';
-import TabBar from '../Navigation/TabBar';
 
-const ACCENT = '#C1FF72';
 
 function formatDate(d) {
   const date = new Date(d);
   return date.toLocaleDateString([], { month: 'short', day: 'numeric', weekday: 'short' });
 }
+
 function nextClassDateFromDays(scheduleDays) {
   if (!Array.isArray(scheduleDays) || scheduleDays.length === 0) return null;
   const today = new Date();
@@ -25,6 +24,7 @@ function nextClassDateFromDays(scheduleDays) {
   }
   return null;
 }
+
 function countScheduledSince(lastPayday, scheduleDays) {
   if (!lastPayday || !Array.isArray(scheduleDays) || scheduleDays.length === 0) return 0;
   const start = new Date(lastPayday.toDate ? lastPayday.toDate() : lastPayday);
@@ -43,45 +43,23 @@ function countScheduledSince(lastPayday, scheduleDays) {
 
 const TuitionsScreen = ({ navigation }) => {
   const { user } = useAuth();
-  const [role, setRole] = useState('Teacher'); // default to Teacher
   const [tuitions, setTuitions] = useState([]);
 
-  // fetch user role from Users/{uid}.type
-  useEffect(() => {
-    let ignore = false;
-    (async () => {
-      if (!user?.uid) return;
-      try {
-        const snap = await getDoc(doc(db, 'Users', user.uid));
-        const t = snap.exists() ? snap.data()?.type : null;
-        if (!ignore) setRole(t === 'Student' ? 'Student' : 'Teacher');
-      } catch {
-        if (!ignore) setRole('Teacher');
-      }
-    })();
-    return () => { ignore = true; };
-  }, [user?.uid]);
-
-  // subscribe to tuitions for this user depending on role
   useEffect(() => {
     if (!user?.uid) return;
-    const field = role === 'Student' ? 'studentId' : 'teacherId';
-    const qy = query(collection(db, 'tuitions'), where(field, '==', user.uid));
-    const unsub = onSnapshot(qy, (snap) => {
+    const colRef = collection(db, 'Users', user.uid, 'tuitions');
+    const unsub = onSnapshot(colRef, (snap) => {
       const list = [];
       snap.forEach((d) => list.push({ id: d.id, ...d.data() }));
       setTuitions(list);
     }, (e) => console.log('tuitions listener error', e));
     return unsub;
-  }, [user?.uid, role]);
-
-  const counterpartLabel = role === 'Student' ? 'Teacher' : 'Student';
+  }, [user?.uid]);
 
   const renderItem = ({ item }) => {
-    const name = role === 'Student'
-      ? (item.teacherName || 'Unnamed teacher')
-      : (item.studentName || 'Unnamed student');
-
+    const iAmTeacher = item.teacherId === user?.uid; // creator is the owner
+    const name = iAmTeacher ? (item.studentName || 'Unnamed student')
+                            : (item.teacherName || 'Unnamed teacher');
     const subjects = Array.isArray(item.subjects) ? item.subjects.join(', ') : item.subjects || '—';
     const nextDate = nextClassDateFromDays(item.scheduleDays || []);
     const classesSince = countScheduledSince(item.lastPayday, item.scheduleDays || []);
@@ -90,16 +68,11 @@ const TuitionsScreen = ({ navigation }) => {
     return (
       <TouchableOpacity
         style={styles.card}
-        onPress={() => navigation.navigate('TuitionDetail', { tuitionId: item.id })}
+        onPress={() => navigation.navigate('TuitionDetail', { tuitionId: item.id, ownerUid: user.uid })}
       >
         <View style={styles.cardHeader}>
           <Text style={styles.studentName}>{name}</Text>
           <Text style={styles.counter}>{classesSince}/{totalForPayday}</Text>
-        </View>
-
-        <View style={styles.row}>
-          <Text style={styles.label}>{counterpartLabel}:</Text>
-          <Text style={styles.value} numberOfLines={1}>{name}</Text>
         </View>
 
         <View style={styles.row}>
@@ -143,16 +116,16 @@ const TuitionsScreen = ({ navigation }) => {
 
       <TouchableOpacity
         style={styles.fab}
-        onPress={() => navigation.navigate('AddTuition', { role })}
+        onPress={() => navigation.navigate('AddTuition')}
         activeOpacity={0.85}
       >
         <Text style={styles.fabPlus}>＋</Text>
       </TouchableOpacity>
-      <TabBar />
     </SafeAreaView>
   );
 };
 
+const ACCENT = '#C1FF72';
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#111', paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 },
   header: { paddingHorizontal: 16, paddingVertical: 14 },
@@ -171,7 +144,7 @@ const styles = StyleSheet.create({
   emptyTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginBottom: 6 },
   emptyText: { color: '#bbb', fontSize: 14, textAlign: 'center' },
 
-  fab: { position: 'absolute', right: 20, bottom: 95, width: 56, height: 56, borderRadius: 28, backgroundColor: ACCENT, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 6, elevation: 6 },
+  fab: { position: 'absolute', right: 20, bottom: 24, width: 56, height: 56, borderRadius: 28, backgroundColor: ACCENT, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 6, elevation: 6 },
   fabPlus: { color: '#000', fontSize: 28, fontWeight: '900', marginTop: -2 },
 });
 
