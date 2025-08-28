@@ -70,7 +70,7 @@ const TuitionsScreen = ({ navigation }) => {
       >
         <View style={styles.cardHeader}>
           <Text style={styles.name}>{name}</Text>
-          <Text style={styles.counter}>{classesSince}/{totalForPayday}</Text>
+          <Text style={styles.counter}>{item.classesSincePayday}/{totalForPayday}</Text>
         </View>
 
         <View style={styles.row}>
