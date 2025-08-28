@@ -9,6 +9,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { useAuth } from '../../contexts/AuthContext';
+import TabBar from '../Navigation/TabBar';
 
 const ACCENT = '#C1FF72';
 const WEEKDAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -201,8 +202,14 @@ const AddTuitionScreen = ({ navigation }) => {
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backTxt}>← Back</Text>
+        <TouchableOpacity
+          accessibilityLabel="Open menu"
+          style={styles.drawerButton}
+          onPress={() => navigation.openDrawer()}
+        >
+          <View style={styles.hamburgerLine} />
+          <View style={styles.hamburgerLine} />
+          <View style={styles.hamburgerLine} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>New Tuition</Text>
         <View style={{ width: 60 }} />
@@ -324,6 +331,8 @@ const AddTuitionScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      <TabBar />
     </SafeAreaView>
   );
 };
@@ -367,6 +376,21 @@ const styles = StyleSheet.create({
 
   saveBtn: { backgroundColor: ACCENT, borderRadius: 18, paddingVertical: 12, alignItems: 'center', marginTop: 16 },
   saveTxt: { color: '#000', fontWeight: '800' },
+
+  drawerButton: {
+    width: 34,
+    height: 34,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  hamburgerLine: {
+    width: 20,
+    height: 2,
+    backgroundColor: ACCENT,
+    marginVertical: 2,
+    borderRadius: 1,
+  },
 });
 
 export default AddTuitionScreen;

@@ -8,6 +8,8 @@ import { db } from '../../firebaseConfig';
 import TabBar from '../Navigation/TabBar';
 import { Ionicons } from '@expo/vector-icons';
 
+const ACCENT = '#C1FF72';
+
 export default function Mainpage() {
   const navigation = useNavigation();
   const [userData, setUserData] = useState({
@@ -162,10 +164,14 @@ export default function Mainpage() {
       <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
         {/* Header Section */}
         <View style={styles.header}>
-          <TouchableOpacity style={styles.menuButton}>
-            <View style={styles.menuLine} />
-            <View style={styles.menuLine} />
-            <View style={styles.menuLine} />
+          <TouchableOpacity
+            accessibilityLabel="Open menu"
+            style={styles.drawerButton}
+            onPress={() => navigation.openDrawer()}
+          >
+            <View style={styles.hamburgerLine} />
+            <View style={styles.hamburgerLine} />
+            <View style={styles.hamburgerLine} />
           </TouchableOpacity>
           
           {/* <View style={styles.logoContainer}>
@@ -427,6 +433,20 @@ const styles = StyleSheet.create({
   paymentAmount: {
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  drawerButton: {
+    width: 34,
+    height: 34,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  hamburgerLine: {
+    width: 20,
+    height: 2,
+    backgroundColor: ACCENT,
+    marginVertical: 2,
+    borderRadius: 1,
   },
 });
 
