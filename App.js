@@ -28,6 +28,26 @@ const Stack = createNativeStackNavigator();
 const Drawer = createDrawerNavigator();
 const DRAWER_WIDTH = Math.round(Dimensions.get('window').width * 0.4); // 40%
 
+function TuitionStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="TuitionsHome" component={TuitionsScreen} />
+      <Stack.Screen name="TuitionDetail" component={TuitionDetailScreen} />
+      <Stack.Screen name="AddTuition" component={AddTuitionScreen} />
+    </Stack.Navigator>
+  )
+}
+
+function ConversationStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="ConversationsHome" component={ConversationsScreen} />
+      <Drawer.Screen name="DirectChat" component={DirectChatScreen} />
+      <Drawer.Screen name="UserSearch" component={UserSearchScreen} />
+    </Stack.Navigator>
+  )
+}
+
 function AppDrawer() {
   return (
     <Drawer.Navigator
@@ -46,13 +66,11 @@ function AppDrawer() {
     >
       {/* Your app screens (TabBar handles navigation between these) */}
       <Drawer.Screen name="Mainpage" component={Mainpage} />
-      <Drawer.Screen name="Conversations" component={ConversationsScreen} />
-      <Drawer.Screen name="Tuition" component={TuitionsScreen} />
+      <Drawer.Screen name="Conversations" component={ConversationStack} />
+      <Drawer.Screen name="Tuition" component={TuitionStack} />
       <Drawer.Screen name="Profile" component={Profile} />
       <Drawer.Screen name="DirectChat" component={DirectChatScreen} />
       <Drawer.Screen name="UserSearch" component={UserSearchScreen} />
-      <Drawer.Screen name="TuitionDetail" component={TuitionDetailScreen} />
-      <Drawer.Screen name="AddTuition" component={AddTuitionScreen} />
     </Drawer.Navigator>
   );
 }
