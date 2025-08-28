@@ -6,6 +6,7 @@ import {
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { useAuth } from '../../contexts/AuthContext';
+import TabBar from '../Navigation/TabBar';
 
 function formatDate(d) {
   const date = new Date(d);
@@ -96,6 +97,15 @@ const TuitionsScreen = ({ navigation }) => {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#111" />
       <View style={styles.header}>
+        <TouchableOpacity
+          accessibilityLabel="Open menu"
+          style={styles.drawerButton}
+          onPress={() => navigation.openDrawer()}
+        >
+          <View style={styles.hamburgerLine} />
+          <View style={styles.hamburgerLine} />
+          <View style={styles.hamburgerLine} />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>My Tuitions</Text>
       </View>
 
@@ -120,6 +130,8 @@ const TuitionsScreen = ({ navigation }) => {
       >
         <Text style={styles.fabPlus}>＋</Text>
       </TouchableOpacity>
+      
+      <TabBar />
     </SafeAreaView>
   );
 };
@@ -127,8 +139,21 @@ const TuitionsScreen = ({ navigation }) => {
 const ACCENT = '#C1FF72';
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#111', paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 },
-  header: { paddingHorizontal: 16, paddingVertical: 14 },
-  headerTitle: { color: ACCENT, fontSize: 18, fontWeight: 'bold' },
+  header: {
+    paddingTop: 10,
+    paddingBottom: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  headerTitle: { 
+    color: ACCENT, 
+    fontSize: 18, 
+    fontWeight: 'bold', 
+    flex: 1, 
+    textAlign: 'center',
+    marginRight: 44, // balance the menu button width
+  },
 
   card: { backgroundColor: '#2e2e2e', borderRadius: 16, padding: 14, marginBottom: 12 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
@@ -143,8 +168,27 @@ const styles = StyleSheet.create({
   emptyTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginBottom: 6 },
   emptyText: { color: '#bbb', fontSize: 14, textAlign: 'center' },
 
-  fab: { position: 'absolute', right: 20, bottom: 24, width: 56, height: 56, borderRadius: 28, backgroundColor: ACCENT, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 6, elevation: 6 },
+  fab: { position: 'absolute', right: 20, 
+    bottom: Platform.select({
+      ios: 24,
+      android: 90,
+      web: 90, 
+    }),  width: 56, height: 56, borderRadius: 28, backgroundColor: ACCENT, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 6, elevation: 6 },
   fabPlus: { color: '#000', fontSize: 28, fontWeight: '900', marginTop: -2 },
+  drawerButton: {
+    width: 34,
+    height: 34,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  hamburgerLine: {
+    width: 20,
+    height: 2,
+    backgroundColor: ACCENT,
+    marginVertical: 2,
+    borderRadius: 1,
+  },
 });
 
 export default TuitionsScreen;

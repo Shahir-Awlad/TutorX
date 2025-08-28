@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, SafeAreaView, StatusBar, Platform, ScrollView, 
 import { doc, onSnapshot, getDoc } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import { useAuth } from '../../contexts/AuthContext';
+import TabBar from '../Navigation/TabBar';
 
 const ACCENT = '#C1FF72';
 
@@ -76,10 +77,17 @@ const TuitionDetailScreen = ({ route, navigation }) => {
       <StatusBar barStyle="light-content" backgroundColor="#111" />
 
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backTxt}>← Back</Text>
+        <TouchableOpacity
+          accessibilityLabel="Open menu"
+          style={styles.drawerButton}
+          onPress={() => navigation.openDrawer()}
+        >
+          <View style={styles.hamburgerLine} />
+          <View style={styles.hamburgerLine} />
+          <View style={styles.hamburgerLine} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Tuition Details</Text>
+        
         <View style={{ width: 60 }} />
       </View>
 
@@ -111,6 +119,8 @@ const TuitionDetailScreen = ({ route, navigation }) => {
           </View>
         )}
       </ScrollView>
+
+      <TabBar />
     </SafeAreaView>
   );
 };
@@ -128,6 +138,20 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', marginTop: 10 },
   label: { color: '#bbb', width: 160 },
   value: { color: '#fff', flex: 1 },
+  drawerButton: {
+    width: 34,
+    height: 34,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  hamburgerLine: {
+    width: 20,
+    height: 2,
+    backgroundColor: ACCENT,
+    marginVertical: 2,
+    borderRadius: 1,
+  },
 });
 
 export default TuitionDetailScreen;

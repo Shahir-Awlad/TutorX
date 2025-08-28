@@ -49,6 +49,10 @@ function AppDrawer() {
       <Drawer.Screen name="Conversations" component={ConversationsScreen} />
       <Drawer.Screen name="Tuition" component={TuitionsScreen} />
       <Drawer.Screen name="Profile" component={Profile} />
+      <Drawer.Screen name="DirectChat" component={DirectChatScreen} />
+      <Drawer.Screen name="UserSearch" component={UserSearchScreen} />
+      <Drawer.Screen name="TuitionDetail" component={TuitionDetailScreen} />
+      <Drawer.Screen name="AddTuition" component={AddTuitionScreen} />
     </Drawer.Navigator>
   );
 }
@@ -67,10 +71,7 @@ export default function App() {
             <Stack.Screen name="App" component={AppDrawer} />
 
             {/* Detail screens that are not part of the drawer menu */}
-            <Stack.Screen name="DirectChat" component={DirectChatScreen} />
-            <Stack.Screen name="UserSearch" component={UserSearchScreen} />
-            <Stack.Screen name="TuitionDetail" component={TuitionDetailScreen} />
-            <Stack.Screen name="AddTuition" component={AddTuitionScreen} />
+            
           </Stack.Navigator>
         </NavigationContainer>
       </AuthProvider>
