@@ -21,6 +21,9 @@ import UserSearchScreen from './components/screens/UserSearchScreen';
 import TuitionsScreen from './components/screens/TuitionsScreen';
 import TuitionDetailScreen from './components/screens/TuitionDetailScreen';
 import AddTuitionScreen from './components/screens/AddTuitionScreen';
+import Schedule from './components/Schedule/Schedule';
+import Payday from './components/Payday/Payday';
+import Class from './components/Class/Class';
 
 import SignoutDrawer from './components/Drawer/SignoutDrawer';
 

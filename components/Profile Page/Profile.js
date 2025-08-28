@@ -19,6 +19,8 @@ import { useNavigation } from '@react-navigation/native';
 import { Ionicons, Feather, Fontisto, MaterialIcons } from '@expo/vector-icons';
 import { db } from '../../firebaseConfig';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import DropDownPicker from 'react-native-dropdown-picker';
+import { getAuth } from 'firebase/auth';
 
 import TabBar from '../Navigation/TabBar';
 
@@ -26,7 +28,7 @@ const { width, height } = Dimensions.get('window');
 
 export default function Profile() {
   const [userData, setUserData] = useState({
-    username: 'sameen4',
+    username: '',
     email: '',
     phoneNumber: '',
     nationality: '',
@@ -34,13 +36,42 @@ export default function Profile() {
     gender: '',
     type: '',
     name: '',
+    institute: '',
+    class: '',
   });
 
   const [editingField, setEditingField] = useState(null);
   const [tempValue, setTempValue] = useState('');
 
+  // Gender
+  const [openGender, setOpenGender] = useState(false);
+  const [selectedGender, setSelectedGender] = useState(userData.gender || '');
+
+  // Class
+  const [openClass, setOpenClass] = useState(false);
+  const [selectedClass, setSelectedClass] = useState(userData.class || '');
+
+  // Items
+  const genderItems = [
+    { label: 'Male', value: 'Male' },
+    { label: 'Female', value: 'Female' }
+  ];
+
+  const classItems = [
+    { label: 'Play Group', value: 'Play Group' },
+    { label: 'Nursery', value: 'Nursery' },
+    { label: 'KG', value: 'KG' },
+    ...Array.from({ length: 12 }, (_, i) => ({
+      label: `${i + 1}`,
+      value: `${i + 1}`
+    }))
+  ];
+
+
   const [phoneError, setPhoneError] = useState('');
   const [nationalityError, setNationalityError] = useState('');
+  const [instituteError, setInstituteError] = useState('');
+  const [classError, setClassError] = useState('');
   const [genderError, setGenderError] = useState('');
    const [nameError, setnameError] = useState('');
 
@@ -53,13 +84,19 @@ export default function Profile() {
 
   const loadUserData = async () => {
     try {
-      const q = query(collection(db, 'Users'), where('username', '==', userData.username));
-      const querySnapshot = await getDocs(q);
-      
-      if (!querySnapshot.empty) {
-        const userDoc = querySnapshot.docs[0];
-        const data = userDoc.data();
 
+      const auth = getAuth();
+      const user = auth.currentUser; // get logged-in user
+      if (!user) {
+        Alert.alert('Error', 'No logged-in user found');
+        return;
+      }
+
+      const userDocRef = doc(db, 'Users', user.uid);
+      const userDoc = await getDoc(userDocRef);
+
+      if (userDoc.exists()) {
+        const data = userDoc.data();
         setUserData({
           username: data.username || '',
           email: data.email || '',
@@ -69,20 +106,21 @@ export default function Profile() {
           imageUrl: data.imageUrl || null,
           gender: data.gender || null,
           type: data.type || '',
-          userId: userDoc.id, 
+          institute: data.institute || '',
+          class: data.class !== undefined ? String(data.class) : '',
+          birthDate: data.birthDate ? data.birthDate.toDate() : null,
+          userId: user.uid,
         });
-          if (data.birthDate) {
-            setBirthDate(data.birthDate.toDate());
-          }
-        
+        if (data.birthDate) setBirthDate(data.birthDate.toDate());
       } else {
-        Alert.alert('Error', 'User not found');
+        Alert.alert('Error', 'User data not found');
       }
     } catch (error) {
       console.error('Error loading user data:', error);
       Alert.alert('Error', 'Failed to load profile data');
     }
   };
+
 
   const handleDateChange = (event, selectedDate) => {
     setShowDatePicker(false);
@@ -92,53 +130,39 @@ export default function Profile() {
     }
   };
 
-
-    // const handleConfirmBirthDate = async () => {
-    //   Alert.alert(
-    //     'Confirm Changes',
-    //     'Are you sure you want to update your birth date?',
-    //     [
-    //       {
-    //         text: 'Cancel',
-    //         style: 'cancel',
-    //         onPress: () => {
-    //           setEditingBirthDate(false);
-    //           setTempBirthDate(null);
-    //         }
-    //       },
-    //       {
-    //         text: 'Confirm',
-    //         onPress: async () => {
-    //           try {
-    //             await updateDoc(doc(db, 'Users', userData.userId), {
-    //               birthDate: Timestamp.fromDate(tempBirthDate)
-    //             });
-    //             setBirthDate(tempBirthDate);
-    //             setEditingBirthDate(false);
-    //             Alert.alert('Success', 'Birth date updated successfully!');
-    //           } catch (error) {
-    //             console.error('Error updating birth date:', error);
-    //             Alert.alert('Error', 'Failed to update birth date');
-    //           }
-    //         }
-    //       }
-    //     ]
-    //   );
-    // };
-
   const handleSaveBirthDate = async (date) => {
     try {
       if (!tempBirthDate) {
         throw new Error("No date selected");
       }
       
-      await updateDoc(doc(db, 'Users', userData.userId), {
-        birthDate: Timestamp.fromDate(tempBirthDate)
-      });
-      
-      setBirthDate(tempBirthDate); 
-      setEditingBirthDate(false); 
-      Alert.alert('Success', 'Birth date updated!');
+      Alert.alert(
+        'Confirm Changes',
+        'Are you sure you want to update your birth date to ' + tempBirthDate.toLocaleDateString() + '?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Confirm',
+            onPress: async () => {
+              try {
+                if (userData.userId) {
+                  await updateDoc(doc(db, 'Users', userData.userId), {
+                    birthDate: Timestamp.fromDate(tempBirthDate)
+                  });
+
+                  setBirthDate(tempBirthDate);
+                  setEditingBirthDate(false);
+                  //setTempBirthDate(null);
+                  Alert.alert('Success', 'Birth date updated successfully!');
+                }
+              } catch (error) {
+                console.error('Error updating birth date:', error);
+                Alert.alert('Error', 'Failed to update birth date');
+              }
+            },
+          },
+        ]
+      )
     } catch (error) {
       console.error('Error updating birth date:', error);
       Alert.alert('Error', 'Failed to update birth date');
@@ -152,7 +176,9 @@ export default function Profile() {
     if (!tempValue.trim()) {
       if (editingField === 'phoneNumber') setPhoneError('Phone number cannot be empty');
       if (editingField === 'nationality') setNationalityError('Nationality cannot be empty');
-      if (editingField === 'gender') setNationalityError('Gender cannot be empty');
+      if (editingField === 'gender') setGenderError('Gender cannot be empty');
+      if (editingField === 'institute') setInstituteError('Institute cannot be empty');
+      if (editingField === 'class') setClassError('Class cannot be empty');
       return;
     }
 
@@ -170,7 +196,7 @@ export default function Profile() {
             try {
               if (userData.userId) {
                 await updateDoc(doc(db, 'Users', userData.userId), {
-                  [editingField]: tempValue.trim()
+                  [editingField]: editingField === 'class' ? parseInt(tempValue.trim(), 10) : tempValue.trim()
                 });
 
                 setUserData(prev => ({
@@ -212,6 +238,11 @@ export default function Profile() {
     setTempValue('');
     setPhoneError('');
     setNationalityError('');
+    setSelectedGender(userData.gender || '');
+    setGenderError('');
+    setInstituteError('');
+    setClassError();
+    setSelectedClass(userData.class || '');
   };
 
   useEffect(() => {
@@ -232,7 +263,7 @@ export default function Profile() {
       >
         <SafeAreaView style={styles.safeArea}>
           <StatusBar barStyle="light-content" backgroundColor="#000" />
-          +
+          
           <View style={styles.headerContainer}>
             <View style={styles.decorativeCircleLarge} />
             <View style={styles.decorativeCircleSmall} />
@@ -348,7 +379,6 @@ export default function Profile() {
                     onPress={() => handleStartEditing('phoneNumber', userData.phoneNumber)}
                     style={styles.editButton}
                   >
-                    {/* <Ionicons name="create-outline" size={22} color="#C1FF72" /> */}
                     <Feather name="edit-2" size={22} color="#C1FF72" />
                   </TouchableOpacity>
                 </View>
@@ -398,44 +428,61 @@ export default function Profile() {
               {nationalityError && <Text style={styles.errorText}>{nationalityError}</Text>}
             </View>
 
-            <Text style={styles.fieldLabel}>Gender</Text>
-            <View style={styles.fieldContainer}>
-              {editingField === 'gender' ? (
+          <Text style={styles.fieldLabel}>Gender</Text>
+          <View style={styles.fieldContainer}>
+            {editingField === 'gender' ? (
                 <View style={styles.editContainer}>
                   <Fontisto name="transgender" size={18} color="#C1FF72" style={styles.inputIcon} />
-                  <TextInput
-                    placeholder="Enter gender"
-                    value={tempValue}
-                    onChangeText={setTempValue}
-                    style={styles.editInput}
-                    placeholderTextColor="#e8e8e8ff"
-                    autoFocus
-                  />
+                  <Text style={styles.editInput}>{selectedGender}</Text>
                   <View style={styles.editActions}>
                     <TouchableOpacity onPress={handleSaveChanges}>
-                      <Ionicons name="checkmark-circle" size={22} marginRight={8} color="#5ce747ff" />
+                      <Ionicons name="checkmark-circle" size={22} color="#5ce747ff" />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={handleCancelEditing}>
+                    <TouchableOpacity
+                      onPress= {handleCancelEditing}
+                    >
                       <Ionicons name="close-circle" size={22} color="#F54D4D" />
                     </TouchableOpacity>
                   </View>
                 </View>
-              ) : (
-                <View style={styles.fieldValueContainer}>
-                  <Fontisto name="transgender" size={18} color="#C1FF72" style={styles.inputIcon} />
-                  <Text style={styles.fieldText}>
-                    {userData.gender || 'Add gender'}
-                  </Text>
-                  <TouchableOpacity 
-                    onPress={() => handleStartEditing('gender', userData.gender)}
-                    style={styles.editButton}
-                  >
-                    {/* <Ionicons name="create-outline" size={22} color="#C1FF72" /> */}
-                    <Feather name="edit-2" size={22} color="#C1FF72"/>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
+            ) : (
+              <View style={styles.fieldValueContainer}>
+                <Fontisto name="transgender" size={18} color="#C1FF72" style={styles.inputIcon} />
+                <DropDownPicker
+                  open={openGender}
+                  value={selectedGender}
+                  items={genderItems}
+                  setOpen={setOpenGender}
+                  setValue={(callback) => {
+                    const newValue = callback(selectedGender);
+                    setSelectedGender(newValue);
+                    setEditingField('gender'); 
+                    return newValue;
+                  }}
+                  // setValue={setSelectedGender}
+                  placeholder= {userData.gender || "Add Gender"}
+                  style={styles.dropdown}
+                  dropDownContainerStyle={styles.dropdownContainer}
+                  listMode="SCROLLVIEW"
+                  textStyle={styles.dropdownText}
+                  ArrowDownIconComponent={({ style }) => (
+                    <Ionicons name="chevron-down" size={24} color="#C1FF72" style={style} />
+                  )}
+                  ArrowUpIconComponent={({ style }) => (
+                    <Ionicons name="chevron-up" size={22} color="#C1FF72" style={style} />
+                  )}
+                  onSelectItem={(item) => {
+                    setSelectedGender(item.value);
+                    setTempValue(item.value);
+                    setOpenGender(false);
+                    setEditingField('gender');
+                  }}
+                />
+              </View>
+            )}
+            {genderError && <Text style={styles.errorText}>{genderError}</Text>}
+          </View>
+
 
             <Text style={styles.fieldLabel}>Date of Birth</Text>
             <View style={styles.fieldContainer}>
@@ -482,6 +529,104 @@ export default function Profile() {
                 />
               )}
             </View>
+
+            {userData.type === 'Student' && (
+            <>
+              <Text style={styles.fieldLabel}>Institute</Text>
+              <View style={styles.fieldContainer}>
+                {editingField === 'institute' ? (
+                  <View style={styles.editContainer}>
+                    <Ionicons name="school" size={18} color="#C1FF72" style={styles.inputIcon} />
+                    <TextInput
+                      placeholder="Enter institute name"
+                      value={tempValue}
+                      onChangeText={setTempValue}
+                      style={styles.editInput}
+                      placeholderTextColor="#e8e8e8ff"
+                      autoFocus
+                    />
+                    <View style={styles.editActions}>
+                      <TouchableOpacity onPress={handleSaveChanges}>
+                        <Ionicons name="checkmark-circle" size={22} color="#5ce747ff" />
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={handleCancelEditing}>
+                        <Ionicons name="close-circle" size={22} color="#F54D4D" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : (
+                  <View style={styles.fieldValueContainer}>
+                    <Ionicons name="school" size={18} color="#C1FF72" style={styles.inputIcon} />
+                    <Text style={styles.fieldText}>
+                      {userData.institute || 'Add institute'}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => handleStartEditing('institute', userData.institute)}
+                      style={styles.editButton}
+                    >
+                      <Feather name="edit-2" size={22} color="#C1FF72" />
+                    </TouchableOpacity>
+                  </View>
+                )}
+                 {instituteError && <Text style={styles.errorText}>{instituteError}</Text>}
+              </View>
+
+              <Text style={styles.fieldLabel}>Class</Text>
+               <View style={styles.fieldContainer}>
+            {editingField === 'class' ? (
+                <View style={styles.editContainer}>
+                  <Ionicons name="book" size={18} color="#C1FF72" style={styles.inputIcon} />
+                  <Text style={styles.editInput}>{selectedClass}</Text>
+                  <View style={styles.editActions}>
+                    <TouchableOpacity onPress={handleSaveChanges}>
+                      <Ionicons name="checkmark-circle" size={22} color="#5ce747ff" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress= {handleCancelEditing}
+                    >
+                      <Ionicons name="close-circle" size={22} color="#F54D4D" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+            ) : (
+              <View style={styles.fieldValueContainer}>
+                <Ionicons name="book" size={18} color="#C1FF72" style={styles.inputIcon} />
+                <DropDownPicker
+                  open={openClass}
+                  value={selectedClass}
+                  items={classItems}
+                  setOpen={setOpenClass}
+                  setValue={(callback) => {
+                    const newValue = callback(selectedClass);
+                    setSelectedClass(newValue);
+                    setEditingField('class'); 
+                    return newValue;
+                  }}
+                  placeholder={userData.class || "Enter Class"}
+                  style={styles.dropdown}
+                  dropDownContainerStyle={styles.dropdownContainer}
+                  listMode="SCROLLVIEW"
+                  textStyle={styles.dropdownText}
+                  ArrowDownIconComponent={({ style }) => (
+                    <Ionicons name="chevron-down" size={24} color="#C1FF72" style={style} />
+                  )}
+                  ArrowUpIconComponent={({ style }) => (
+                    <Ionicons name="chevron-up" size={22} color="#C1FF72" style={style} />
+                  )}
+                  onSelectItem={(item) => {
+                    setSelectedClass(item.value);
+                    setTempValue(item.value);
+                    setOpenClass(false);
+                    setEditingField('class');
+                  }}
+                />
+              </View>
+            )}
+            {classError && <Text style={styles.errorText}>{classError}</Text>}
+          </View>
+            </>
+          )}
+
 
           </View>
           
@@ -531,6 +676,26 @@ const styles = StyleSheet.create({
     backgroundColor: '#F54D4D',
     top: 70,
     right: width * 0.05,
+  },
+  dropdown: {
+    borderWidth: 1,
+    borderColor: '#000',
+    backgroundColor: '#000', 
+    borderRadius: 10,
+    width: '94%',
+    height: 30,
+  },
+   dropdownContainer: {
+    borderWidth: 1,
+    borderColor: '#8a8a8aff',
+    borderRadius: 10,
+    backgroundColor: '#333', 
+    width: '92%',
+    maxHeight: 180, 
+  },
+  dropdownText: {
+    color: '#fff',
+    fontSize: 16,
   },
   profileImageContainer: {
     width: 110,
@@ -606,6 +771,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     color: '#fff',
+    marginLeft: 8,
   },
 
   fieldLabel: {
@@ -633,11 +799,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     color: '#000',
-  },
-  fieldText: {
-    flex: 1,
-    fontSize: 16,
-    color: '#ffffffff',
   },
   actionButton: {
     marginLeft: 5,
