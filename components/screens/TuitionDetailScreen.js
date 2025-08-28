@@ -42,6 +42,10 @@ const TuitionDetailScreen = ({ route, navigation }) => {
   const [salary, setSalary] = useState('0');
   const [lastPaydayStr, setLastPaydayStr] = useState('');
 
+  // UI state
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
   useEffect(() => {
     if (!tuitionId || !ownerUid) return;
     const ref = doc(db, 'Users', ownerUid, 'tuitions', tuitionId);
@@ -124,7 +128,6 @@ const TuitionDetailScreen = ({ route, navigation }) => {
       return;
     }
 
-    // build update
     const update = {
       subjects: subjectsText.split(',').map(s => s.trim()).filter(Boolean),
       scheduleDays,
@@ -132,29 +135,29 @@ const TuitionDetailScreen = ({ route, navigation }) => {
       classesPerPayday: parseInt(classesPerPayday, 10) || 0,
       salary: parseFloat(salary) || 0,
       lastPayday: Timestamp.fromDate(lp),
-      // (optional) updatedAt: serverTimestamp() — if you want a timestamp
+      updatedAt: Timestamp.now(),
     };
 
     try {
+      setSaving(true);
       const batch = writeBatch(db);
 
-      // 1) Update THIS doc
+      // mine
       const mineRef = doc(db, 'Users', ownerUid, 'tuitions', tuition.id);
       batch.update(mineRef, update);
 
-      // 2) Update COUNTERPARTY doc by locating the same sharedKey
+      // counterparty
       const otherUid = tuition.counterpartyUid || ((tuition.teacherId === ownerUid) ? tuition.studentId : tuition.teacherId);
-      if (!otherUid || !tuition.sharedKey) {
-        throw new Error('Missing counterpartyUid or sharedKey on tuition document.');
-      }
+      if (!otherUid || !tuition.sharedKey) throw new Error('Missing counterpartyUid/sharedKey on tuition.');
 
-      const theirCol = collection(db, 'Users', otherUid, 'tuitions');
-      const snap = await getDocs(query(theirCol, where('sharedKey', '==', tuition.sharedKey)));
-      if (snap.empty) {
-        throw new Error('Could not locate the counterparty tuition document.');
+      const theirSnap = await getDocs(
+        query(collection(db, 'Users', otherUid, 'tuitions'), where('sharedKey', '==', tuition.sharedKey))
+      );
+      if (!theirSnap.empty) {
+        batch.update(theirSnap.docs[0].ref, update);
+      } else {
+        throw new Error('Could not find the counterparty tuition to update.');
       }
-      const theirDoc = snap.docs[0].ref;
-      batch.update(theirDoc, update);
 
       await batch.commit();
       setEditing(false);
@@ -162,6 +165,54 @@ const TuitionDetailScreen = ({ route, navigation }) => {
     } catch (e) {
       console.error('Save tuition error', e);
       Alert.alert('Error', e.message || 'Failed to save tuition.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onDelete = async () => {
+    if (!tuition || !user?.uid) return;
+    Alert.alert(
+      'Delete Tuition',
+      'This will remove the tuition for both you and the other user. This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: deleteNow }
+      ]
+    );
+  };
+
+  const deleteNow = async () => {
+    try {
+      setDeleting(true);
+      const batch = writeBatch(db);
+
+      // mine
+      const mineRef = doc(db, 'Users', ownerUid, 'tuitions', tuition.id);
+      batch.delete(mineRef);
+
+      // counterparty
+      const otherUid = tuition.counterpartyUid || ((tuition.teacherId === ownerUid) ? tuition.studentId : tuition.teacherId);
+      if (!otherUid || !tuition.sharedKey) throw new Error('Missing counterpartyUid/sharedKey on tuition.');
+
+      const theirSnap = await getDocs(
+        query(collection(db, 'Users', otherUid, 'tuitions'), where('sharedKey', '==', tuition.sharedKey))
+      );
+      if (!theirSnap.empty) {
+        batch.delete(theirSnap.docs[0].ref);
+      } else {
+        // If we can't find their copy, still delete mine and proceed.
+        console.warn('Counterparty tuition not found; deleting only local copy.');
+      }
+
+      await batch.commit();
+      Alert.alert('Deleted', 'Tuition removed for both users.');
+      navigation.goBack();
+    } catch (e) {
+      console.error('Delete tuition error', e);
+      Alert.alert('Error', e.message || 'Failed to delete tuition.');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -183,7 +234,7 @@ const TuitionDetailScreen = ({ route, navigation }) => {
         <TouchableOpacity
           accessibilityLabel="Open menu"
           style={styles.drawerButton}
-          onPress={() => navigation.openDrawer()}
+          onPress={() => navigation.openDrawer && navigation.openDrawer()}
         >
           <View style={styles.hamburgerLine} />
           <View style={styles.hamburgerLine} />
@@ -192,15 +243,32 @@ const TuitionDetailScreen = ({ route, navigation }) => {
 
         <Text style={styles.headerTitle}>Tuition Details</Text>
 
-        {editing ? (
-          <TouchableOpacity style={styles.actionBtn} onPress={onSave}>
-            <Text style={styles.actionTxt}>Save</Text>
+        <View style={styles.headerActions}>
+          {editing ? (
+            <TouchableOpacity
+              style={[styles.actionBtn, saving && { opacity: 0.6 }]}
+              onPress={onSave}
+              disabled={saving}
+            >
+              <Text style={styles.actionTxt}>Save</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={styles.actionBtn}
+              onPress={() => setEditing(true)}
+            >
+              <Text style={styles.actionTxt}>Edit</Text>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            style={[styles.deleteBtn, deleting && { opacity: 0.6 }]}
+            onPress={onDelete}
+            disabled={deleting}
+          >
+            <Text style={styles.deleteTxt}>Delete</Text>
           </TouchableOpacity>
-        ) : (
-          <TouchableOpacity style={styles.actionBtn} onPress={() => setEditing(true)}>
-            <Text style={styles.actionTxt}>Edit</Text>
-          </TouchableOpacity>
-        )}
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
@@ -343,8 +411,12 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#111', paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 },
   header: { paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   headerTitle: { color: ACCENT, fontSize: 18, fontWeight: 'bold' },
+
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   actionBtn: { paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#2e2e2e', borderRadius: 10 },
   actionTxt: { color: '#fff', fontWeight: '700' },
+  deleteBtn: { paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#F54D4D', borderRadius: 10, marginLeft: 8 },
+  deleteTxt: { color: '#fff', fontWeight: '700' },
 
   sectionTitle: { color: ACCENT, fontWeight: '800' },
 
