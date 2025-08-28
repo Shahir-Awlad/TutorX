@@ -102,8 +102,9 @@ export default function Mainpage() {
   };
 
   const handleViewAllSchedule = () => {
-    console.log('Navigate to Schedule page');
+    navigation.navigate('Schedule'); 
   };
+
 
   const handleViewAllPayday = () => {
     console.log('Navigate to Payday page');
