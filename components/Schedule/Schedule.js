@@ -27,24 +27,30 @@ import {
 import { db } from '../../firebaseConfig';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { format, addDays, startOfMonth, endOfMonth, isBefore, isAfter, parseISO, isValid } from 'date-fns';
+import { format, addDays, startOfMonth, endOfMonth, isBefore, isAfter, parseISO, isValid, isToday, add } from 'date-fns';
 
 const { width, height } = Dimensions.get('window');
 
-// Add this helper function after your imports and before the component
 const safeParseDateString = (dateString) => {
   try {
-    if (!dateString || typeof dateString !== 'string') {
+    if (!dateString || typeof dateString !== 'string' || dateString.trim() === '' || dateString === 'undefined') {
       console.warn('Invalid date string provided:', dateString);
       return null;
     }
     
-    const date = parseISO(dateString);
+    const cleanedDateString = dateString.trim();
+    
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanedDateString)) {
+      console.warn('Invalid date format. Expected YYYY-MM-DD:', cleanedDateString);
+      return null;
+    }
+    
+    const date = parseISO(cleanedDateString);
     if (isValid(date)) {
       return date;
     }
     
-    console.warn('Could not parse date string:', dateString);
+    console.warn('Could not parse date string:', cleanedDateString);
     return null;
   } catch (error) {
     console.error('Error parsing date:', dateString, error);
@@ -56,12 +62,10 @@ const convertFirestoreTimestamp = (timestamp) => {
   if (!timestamp) return null;
   
   if (timestamp.seconds) {
-    // Firestore timestamp object
     return new Date(timestamp.seconds * 1000);
   }
   
   if (typeof timestamp === 'string') {
-    // Regular date string
     return safeParseDateString(timestamp);
   }
   
@@ -85,19 +89,40 @@ export default function Schedule() {
   const [missedEventsLimit, setMissedEventsLimit] = useState(20);
   const [tuitionsData, setTuitionsData] = useState([]);
   const [userRole, setUserRole] = useState('');
+  const [allMissedEventsCount, setAllMissedEventsCount] = useState(0);
 
   useEffect(() => {
     initializeSchedule();
-  }, [currentDate]);;
+  }, [currentDate]);
+
+  useEffect(() => {
+    if (userRole && tuitionsData.length > 0) {
+      console.log('User role changed, regenerating events with role:', userRole);
+      generateAndFetchEvents();
+    }
+  }, [userRole]);
+
+  useEffect(() => {
+    console.log('Current userRole state:', userRole);
+  }, [userRole]);
+
+  useEffect(() => {
+    console.log('Resolved tuitionsData:', tuitionsData.map(t => ({
+      id: t.id,
+      studentName: t.studentName,
+      teacherName: t.teacherName
+    })));
+  }, [tuitionsData]);
 
   const initializeSchedule = async () => {
     try {
       setLoading(true);
-      await fetchUserRole();
+      
+      const role = await fetchUserRole();
+      setUserRole(role);
+      
       await fetchTuitionsData();
-      //await generateAndFetchEvents();
-      //setLoading(false);
-      //console.log('TuitionsData state after setting:', JSON.stringify(tuitionsData, null, 2));
+      
       setTimeout(async () => {
         await generateAndFetchEvents();
         setLoading(false);
@@ -116,11 +141,15 @@ export default function Schedule() {
       if (user) {
         const userDoc = await getDoc(doc(db, 'Users', user.uid));
         if (userDoc.exists()) {
-          setUserRole(userDoc.data().type);
+          const userType = userDoc.data().type;
+          setUserRole(userType);
+          return userType;
         }
       }
+      return null;
     } catch (error) {
       console.error('Error fetching user role:', error);
+      return null;
     }
   };
 
@@ -128,281 +157,329 @@ export default function Schedule() {
     try {
       const auth = getAuth();
       const user = auth.currentUser;
-      if (!user) {
-        console.log('No authenticated user');
-        return;
-      }
+      if (!user) return;
 
-      console.log('Fetching tuitions for user:', user.uid);
+      const userDoc = await getDoc(doc(db, 'Users', user.uid));
+      const userType = userDoc.exists() ? userDoc.data().type : null;
+      setUserRole(userType);
 
-      try {
-        const tuitionsRef = collection(db, 'Users', user.uid, 'tuitions');
-        const tuitionsSnapshot = await getDocs(tuitionsRef);
+      const tuitionsRef = collection(db, 'Users', user.uid, 'tuitions');
+      const tuitionsSnapshot = await getDocs(tuitionsRef);
+      
+      const tuitions = [];
+      for (const docSnapshot of tuitionsSnapshot.docs) {
+        const data = docSnapshot.data();
         
-        const tuitions = [];
-        tuitionsSnapshot.forEach(doc => {
-          tuitions.push({ id: doc.id, ...doc.data() });
+        console.log('Processing tuition document:', docSnapshot.id, data);
+        
+        // Use the names directly from the tuition document
+        const studentName = data.studentName || 'Student';
+        const teacherName = data.teacherName || 'Teacher';
+        
+        console.log(`Tuition ${docSnapshot.id}: studentName="${studentName}", teacherName="${teacherName}"`);
+
+        tuitions.push({
+          id: docSnapshot.id,
+          studentName: studentName,
+          teacherName: teacherName,
+          counterpartyUid: userType === 'Teacher' ? data.studentId : data.teacherId,
+          subjects: data.subjects || [],
+          scheduleDays: data.scheduleDays || [],
+          classesPerPayday: data.classesPerPayday || 0,
+          classesSincePayday: data.classesSincePayday || 0,
+          salary: data.salary || 0,
+          lastPayday: data.lastPayday
         });
-        
-        console.log('Fetched tuitions:', tuitions.length);
-        setTuitionsData(tuitions);
-
-        console.log('TuitionsData state after setting:', JSON.stringify(tuitions, null, 2));
-        
-      } catch (firebaseError) {
-        console.warn('Firebase permissions issue, using demo data:', firebaseError.message);
-        
-        const demoTuitions = [
-          {
-            id: 'demo1',
-            studentName: 'John Doe',
-            teacherName: 'Jane Smith',
-            subjects: ['Math', 'Physics'],
-            scheduleDays: [1, 3, 5],
-            classesPerPayday: 12,
-            classesSincePayday: 3,
-            salary: 5000,
-            lastPayday: '2025-08-01'
-          },
-          {
-            id: 'demo2',
-            studentName: 'Alice Johnson',
-            teacherName: 'Bob Wilson',
-            subjects: ['Chemistry'],
-            scheduleDays: [2, 4], 
-            classesPerPayday: 8,
-            classesSincePayday: 6,
-            salary: 4000,
-            lastPayday: '2025-08-15'
-          }
-        ];
-        
-        setTuitionsData(demoTuitions);
       }
       
+      console.log('Final tuitions array:', tuitions);
+      setTuitionsData(tuitions);
     } catch (error) {
       console.error('Error in fetchTuitionsData:', error);
       setTuitionsData([]);
     }
   };
 
-  const generateEventsForMonth = (date, tuitions = tuitionsData) => {
-  const monthStart = startOfMonth(date);
-  const monthEnd = endOfMonth(date);
-  const generatedEvents = {};
-  const today = new Date();
-  
-  console.log('generateEventsForMonth called with tuitions:', tuitions.length);
-
-  tuitions.forEach((tuition, index) => {
-    console.log(`Tuition ${index}:`, {
-      scheduleDays: tuition.scheduleDays,
-      classesPerPayday: tuition.classesPerPayday,
-      classesSincePayday: tuition.classesSincePayday,
-      lastPayday: tuition.lastPayday
-    });
+  const generateEventsForMonth = (date, tuitions = tuitionsData, currentUserRole = userRole) => {
+    const monthStart = startOfMonth(date);
+    const monthEnd = endOfMonth(date);
+    const generatedEvents = {};
+    const today = new Date();
     
-    const { 
-      scheduleDays = [], 
-      classesPerPayday = 0, 
-      classesSincePayday = 0,
-      lastPayday,
-      salary = 0,
-      studentName,
-      teacherName,
-      subjects = []
-    } = tuition;
+    console.log('generateEventsForMonth called with userRole:', currentUserRole);
+    console.log('Tuitions data:', tuitions.length);
 
-    // Generate class events
-    scheduleDays.forEach(dayIndex => {
-      let currentDay = new Date(monthStart);
-      
-      // Find the first occurrence of the scheduled day in the month
-      while (currentDay.getDay() !== dayIndex && currentDay <= monthEnd) {
-        currentDay = addDays(currentDay, 1);
+    if (!tuitions || !Array.isArray(tuitions)) {
+      console.warn('Invalid tuitions array provided');
+      return generatedEvents;
+    }
+
+    tuitions.forEach((tuition, index) => {
+      if (!tuition || typeof tuition !== 'object') {
+        console.warn('Skipping invalid tuition object:', tuition);
+        return;
       }
-      while (currentDay <= monthEnd) {
-        try {
-          const dateKey = format(currentDay, 'yyyy-MM-dd');
-          
-          if (!generatedEvents[dateKey]) {
-            generatedEvents[dateKey] = [];
-          }
 
-          const displayName = userRole === 'Teacher' ? studentName : teacherName;
-          const eventType = isBefore(currentDay, today) ? 'missed-class' : 'class';
-          
-          generatedEvents[dateKey].push({
-            id: `${tuition.id}-class-${dateKey}`,
-            type: eventType,
-            tuitionId: tuition.id,
-            name: displayName,
-            subject: subjects[0] || 'General',
-            completed: false,
-            time: 'All Day'
-          });
+      const { 
+        scheduleDays = [], 
+        classesPerPayday = 0, 
+        classesSincePayday = 0,
+        lastPayday,
+        salary = 0,
+        studentName,
+        teacherName,
+        counterpartyUid,
+        subjects = []
+      } = tuition;
 
-          currentDay = addDays(currentDay, 7); // Next week
-        } catch (error) {
-          console.error('Error generating event for date:', currentDay, error);
-          break; // Exit loop if date operations fail
+      // Fix: Determine the display name based on user role
+      let displayName;
+      if (currentUserRole === 'Teacher') {
+        displayName = studentName || 'Student';
+      } else if (currentUserRole === 'Student') {
+        displayName = teacherName || 'Teacher';
+      } else {
+        displayName = 'Unknown';
+      }
+
+      console.log(`Processing tuition ${tuition.id}: userRole=${currentUserRole}, displayName=${displayName}`);
+
+      // Generate class events
+      scheduleDays.forEach(dayIndex => {
+        let currentDay = new Date(monthStart);
+        
+        while (currentDay.getDay() !== dayIndex && currentDay <= monthEnd) {
+          currentDay = addDays(currentDay, 1);
         }
-      }
-    });
-
-    // Calculate and generate payday events
-    if (classesPerPayday > 0) {
-      const remainingClasses = classesPerPayday - classesSincePayday;
-      let classCount = 0;
-      let currentDay = new Date(monthStart);
-
-      let lastPaydayDate = null;
-      if (lastPayday) {
-        lastPaydayDate = convertFirestoreTimestamp(lastPayday);
-        console.log('Converted lastPayday:', lastPaydayDate);
-      }
-
-      while (currentDay <= monthEnd && classCount < remainingClasses) {
-        if (scheduleDays.includes(currentDay.getDay())) {
-          classCount++;
-          if (classCount === remainingClasses) {
+        
+        while (currentDay <= monthEnd) {
+          try {
             const dateKey = format(currentDay, 'yyyy-MM-dd');
+            const eventDate = safeParseDateString(dateKey);
+            
+            if (!eventDate) {
+              currentDay = addDays(currentDay, 7);
+              continue;
+            }
             
             if (!generatedEvents[dateKey]) {
               generatedEvents[dateKey] = [];
             }
 
-            const displayName = userRole === 'Teacher' ? studentName : teacherName;
-            const eventType = isBefore(currentDay, today) ? 'missed-payday' : 'payday';
+            const isFuture = isAfter(eventDate, today);
+            const isTodayEvent = isToday(eventDate);
+            
+            let eventType;
+            if (isTodayEvent || isFuture) {
+              eventType = 'class';
+            } else {
+              eventType = 'missed-class';
+            }
             
             generatedEvents[dateKey].push({
-              id: `${tuition.id}-payday-${dateKey}`,
+              id: `${tuition.id}-class-${dateKey}`,
               type: eventType,
               tuitionId: tuition.id,
               name: displayName,
-              amount: salary,
+              subject: subjects[0] || 'General',
               completed: false,
-              time: 'All Day'
+              time: 'All Day',
+              counterpartyUid: counterpartyUid
             });
+
+            currentDay = addDays(currentDay, 7);
+          } catch (error) {
+            console.error('Error generating event for date:', currentDay, error);
+            break;
           }
         }
-        currentDay = addDays(currentDay, 1);
-      }
-    }
-  });
+      });
 
-  return generatedEvents;
-};
+      // Generate payday events
+      if (classesPerPayday > 0) {
+        const remainingClasses = classesPerPayday - classesSincePayday;
+        let classCount = 0;
+        let currentDay = new Date(monthStart);
+
+        while (currentDay <= monthEnd && classCount < remainingClasses) {
+          if (scheduleDays.includes(currentDay.getDay())) {
+            classCount++;
+            if (classCount === remainingClasses) {
+              const dateKey = format(currentDay, 'yyyy-MM-dd');
+              const eventDate = safeParseDateString(dateKey);
+              
+              if (!eventDate) {
+                currentDay = addDays(currentDay, 1);
+                continue;
+              }
+              
+              if (!generatedEvents[dateKey]) {
+                generatedEvents[dateKey] = [];
+              }
+
+              const isFuture = isAfter(eventDate, today);
+              const isTodayEvent = isToday(eventDate);
+              
+              let eventType;
+              if (isTodayEvent || isFuture) {
+                eventType = 'payday';
+              } else {
+                eventType = 'missed-payday';
+              }
+              
+              generatedEvents[dateKey].push({
+                id: `${tuition.id}-payday-${dateKey}`,
+                type: eventType,
+                tuitionId: tuition.id,
+                name: displayName,
+                amount: salary,
+                completed: false,
+                time: 'All Day',
+                counterpartyUid: counterpartyUid
+              });
+            }
+          }
+          currentDay = addDays(currentDay, 1);
+        }
+      }
+    });
+
+    return generatedEvents;
+  };
 
   const generateAndFetchEvents = async () => {
-  try {
-    const auth = getAuth();
-    const user = auth.currentUser;
-    if (!user) {
-      console.log('No authenticated user found');
-      return;
-    }
-
-    const monthKey = format(currentDate, 'MMMM yyyy');
-    console.log('Fetching/generating events for:', monthKey);
-    
-    // Get fresh tuitions data directly for event generation
-    let currentTuitions = tuitionsData;
-    if(currentTuitions.length === 0) {
-      try {
-        const tuitionsRef = collection(db, 'Users', user.uid, 'tuitions');
-        const tuitionsSnapshot = await getDocs(tuitionsRef);
-        tuitionsSnapshot.forEach(doc => {
-          currentTuitions.push({ id: doc.id, ...doc.data() });
-        });
-      } catch (firebaseError) {
-        console.warn('Using tuitionsData state as fallback');
-        currentTuitions = tuitionsData;
-      }
-    }
-
-    console.log('Using tuitions for generation:', currentTuitions.length);
-    
-    // First, try to load from cache for immediate display
     try {
-      const cachedEvents = await AsyncStorage.getItem(`schedule_${monthKey}`);
-      if (cachedEvents) {
-        const parsedEvents = JSON.parse(cachedEvents);
-        setEvents(parsedEvents);
-        processEventsForCalendar(parsedEvents);
-        categorizeEvents(parsedEvents);
-        console.log('Loaded events from cache');
+      const auth = getAuth();
+      const user = auth.currentUser;
+      if (!user) {
+        console.log('No authenticated user found');
+        return;
       }
-    } catch (cacheError) {
-      console.log('No cache found, will generate new events');
-    }
 
-    // Generate events based on tuitions data
-    const monthEvents = generateEventsForMonth(currentDate, currentTuitions);
-    console.log('Generated events:', Object.keys(monthEvents).length);
+      const monthKey = format(currentDate, 'MMMM yyyy');
+      console.log('Fetching/generating events for:', monthKey);
 
-    if (Object.keys(monthEvents).length > 0) {
-      // Try to save to Firebase (but don't fail if permissions are insufficient)
+      let currentTuitions = [...tuitionsData];
+      if (currentTuitions.length === 0) {
+        try {
+          const tuitionsRef = collection(db, 'Users', user.uid, 'tuitions');
+          const tuitionsSnapshot = await getDocs(tuitionsRef);
+          tuitionsSnapshot.forEach(doc => {
+            currentTuitions.push({ id: doc.id, ...doc.data() });
+          });
+        } catch (firebaseError) {
+          console.warn('Using tuitionsData state as fallback');
+        }
+      }
+
+      console.log('Using tuitions for generation:', currentTuitions.length);
+
+      const today = new Date();
+      let combinedEvents = {};
+
       try {
         const scheduleDocRef = doc(db, 'Users', user.uid, 'Schedule', monthKey);
-        await setDoc(scheduleDocRef, monthEvents);
-        console.log('Events saved to Firebase');
+        const scheduleDoc = await getDoc(scheduleDocRef);
+        if (scheduleDoc.exists()) {
+          const firebaseEvents = scheduleDoc.data();
+          Object.entries(firebaseEvents).forEach(([dateKey, dayEvents]) => {
+            const eventDate = safeParseDateString(dateKey);
+            if (eventDate && isBefore(eventDate, today)) {
+              combinedEvents[dateKey] = dayEvents;
+            }
+          });
+          console.log('Loaded past events from Firebase:', Object.keys(combinedEvents).length);
+        }
       } catch (firebaseError) {
-        console.warn('Could not save to Firebase, continuing with local data:', firebaseError.message);
+        console.warn('Could not fetch past events from Firebase:', firebaseError.message);
       }
 
-      // Update state and cache
-      setEvents(monthEvents);
-      processEventsForCalendar(monthEvents);
-      categorizeEvents(monthEvents);
-      
-      // Cache for offline use
+      const generatedEvents = generateEventsForMonth(currentDate, currentTuitions, userRole);
+
+      Object.entries(generatedEvents).forEach(([dateKey, dayEvents]) => {
+        const eventDate = safeParseDateString(dateKey);
+        if (eventDate && (isAfter(eventDate, today) || isToday(eventDate))) {
+          if (combinedEvents[dateKey]) {
+            const eventMap = new Map();
+            combinedEvents[dateKey].forEach(event => eventMap.set(event.id, event));
+            dayEvents.forEach(event => eventMap.set(event.id, event));
+            combinedEvents[dateKey] = Array.from(eventMap.values());
+          } else {
+            combinedEvents[dateKey] = dayEvents;
+          }
+        }
+      });
+
+      console.log('Combined events (past + future):', Object.keys(combinedEvents).length);
+
+      if (Object.keys(combinedEvents).length > 0) {
+        try {
+          const scheduleDocRef = doc(db, 'Users', user.uid, 'Schedule', monthKey);
+          await setDoc(scheduleDocRef, combinedEvents, { merge: true });
+          console.log('Combined events saved to Firebase');
+        } catch (firebaseError) {
+          console.warn('Could not save combined events to Firebase:', firebaseError.message);
+        }
+
+        setEvents(combinedEvents);
+        processEventsForCalendar(combinedEvents);
+        categorizeEvents(combinedEvents);
+
+        try {
+          await AsyncStorage.setItem(`schedule_${monthKey}`, JSON.stringify(combinedEvents));
+          console.log('Events cached locally');
+        } catch (cacheError) {
+          console.warn('Could not cache events locally:', cacheError);
+        }
+      } else {
+        console.log('No events for this month');
+        setEvents({});
+        setMarkedDates({});
+        setUpcomingEvents([]);
+        setMissedEvents([]);
+      }
+
+    } catch (error) {
+      console.error('Error in generateAndFetchEvents:', error);
+
       try {
-        await AsyncStorage.setItem(`schedule_${monthKey}`, JSON.stringify(monthEvents));
-        console.log('Events cached locally');
+        const monthKey = format(currentDate, 'MMMM yyyy');
+        const cachedEvents = await AsyncStorage.getItem(`schedule_${monthKey}`);
+        if (cachedEvents) {
+          const parsedEvents = JSON.parse(cachedEvents);
+          setEvents(parsedEvents);
+          processEventsForCalendar(parsedEvents);
+          categorizeEvents(parsedEvents);
+          console.log('Loaded events from cache');
+        }
       } catch (cacheError) {
-        console.warn('Could not cache events:', cacheError);
+        console.error('Fallback cache load failed:', cacheError);
+        setEvents({});
+        setMarkedDates({});
+        setUpcomingEvents([]);
+        setMissedEvents([]);
       }
-    } else {
-      console.log('No events generated for this month');
-      setEvents({});
-      setMarkedDates({});
-      setUpcomingEvents([]);
-      setMissedEvents([]);
     }
-    
-  } catch (error) {
-    console.error('Error in generateAndFetchEvents:', error);
-    
-    // Fallback: try to load from cache
-    try {
-      const monthKey = format(currentDate, 'MMMM yyyy');
-      const cachedEvents = await AsyncStorage.getItem(`schedule_${monthKey}`);
-      if (cachedEvents) {
-        const parsedEvents = JSON.parse(cachedEvents);
-        setEvents(parsedEvents);
-        processEventsForCalendar(parsedEvents);
-        categorizeEvents(parsedEvents);
-        console.log('Fallback: loaded from cache');
-      }
-    } catch (cacheError) {
-      console.error('Fallback cache load failed:', cacheError);
-      // Set empty state
-      setEvents({});
-      setMarkedDates({});
-      setUpcomingEvents([]);
-      setMissedEvents([]);
-    }
-  }
-};
-
+  };
 
   const processEventsForCalendar = (monthEvents) => {
     const marked = {};
 
+    if (!monthEvents || typeof monthEvents !== 'object') {
+      setMarkedDates({});
+      return;
+    }
+
     Object.entries(monthEvents).forEach(([date, dayEvents]) => {
-      if (dayEvents && dayEvents.length > 0) {
-        const colors = dayEvents.map(event => getEventColor(event.type));
+      if (!date || !Array.isArray(dayEvents) || dayEvents.length === 0) {
+        return;
+      }
+
+      const colors = dayEvents
+        .filter(event => event && event.type)
+        .map(event => getEventColor(event.type, event.completed));
+      
+      if (colors.length > 0) {
         const prioritizedColors = prioritizeColors(colors);
         
         marked[date] = {
@@ -422,29 +499,47 @@ export default function Schedule() {
     const today = new Date();
     const nextWeek = addDays(today, 7);
 
+    if (!monthEvents || typeof monthEvents !== 'object') {
+      console.warn('Invalid monthEvents provided:', monthEvents);
+      setUpcomingEvents([]);
+      setMissedEvents([]);
+      setAllMissedEventsCount(0);
+      return;
+    }
+
     Object.entries(monthEvents).forEach(([date, dayEvents]) => {
-      if (dayEvents && dayEvents.length > 0) {
-        const eventDate = safeParseDateString(date);
-        
-        // Skip if date is invalid
-        if (!eventDate) {
-          console.warn(`Skipping invalid date: ${date}`);
+      if (!date || !Array.isArray(dayEvents)) {
+        console.warn('Skipping invalid date or dayEvents:', date, dayEvents);
+        return;
+      }
+
+      const eventDate = safeParseDateString(date);
+      
+      if (!eventDate) {
+        console.warn(`Skipping invalid date: ${date}`);
+        return;
+      }
+      
+      dayEvents.forEach(event => {
+        if (!event || typeof event !== 'object') {
+          console.warn('Skipping invalid event:', event);
           return;
         }
+
+        const eventWithDate = { ...event, date, eventDate };
         
-        dayEvents.forEach(event => {
-          const eventWithDate = { ...event, date, eventDate };
-          
-          if (event.type && event.type.includes('missed')) {
-            missed.push(eventWithDate);
-          } else if (eventDate >= today && eventDate <= nextWeek) {
-            upcoming.push(eventWithDate);
-          }
-        });
-      }
+        const isTodayOrFuture = eventDate >= today;
+        
+        if (event.type && event.type.includes('missed') && !isTodayOrFuture) {
+          missed.push(eventWithDate);
+        } else if (isTodayOrFuture && eventDate <= nextWeek) {
+          upcoming.push(eventWithDate);
+        } else if (event.type && event.type.includes('missed')) {
+          missed.push(eventWithDate);
+        }
+      });
     });
 
-    // Sort with safe date comparison
     upcoming.sort((a, b) => {
       if (!a.eventDate || !b.eventDate) return 0;
       return a.eventDate.getTime() - b.eventDate.getTime();
@@ -456,25 +551,30 @@ export default function Schedule() {
     });
 
     setUpcomingEvents(upcoming);
-    setMissedEvents(missed.slice(0, missedEventsLimit));
+    setMissedEvents(missed.slice(0, 5));
+    setAllMissedEventsCount(missed.length);
   };
 
   const prioritizeColors = (colors) => {
-    const priority = ['#FF4444', '#FFD700', '#4CAF50']; // Red, Yellow, Green
+    const priority = ['#FF4444', '#FFD700', '#4CAF50'];
     return colors.sort((a, b) => priority.indexOf(a) - priority.indexOf(b));
   };
 
-  const getEventColor = (type) => {
+  const getEventColor = (type, completed = false) => {
+    if (completed) {
+      return '#4CAF50'; 
+    }
+
     switch (type) {
       case 'missed-class':
       case 'missed-payday':
-        return '#FF4444'; // Red
+        return '#FF4444';
       case 'payday':
-        return '#FFD700'; // Yellow
+        return '#FFD700';
       case 'class':
-        return '#4CAF50'; // Green
+        return '#2196F3';
       default:
-        return '#4CAF50';
+        return '#2196F3';
     }
   };
 
@@ -516,8 +616,7 @@ export default function Schedule() {
 
   const loadMoreMissedEvents = () => {
     setLoadingMore(true);
-    const newLimit = missedEventsLimit + 20;
-    setMissedEventsLimit(newLimit);
+    const newLimit = missedEvents.length + 5;
     
     setTimeout(() => {
       const allMissedEvents = [];
@@ -525,20 +624,23 @@ export default function Schedule() {
 
       Object.entries(events).forEach(([date, dayEvents]) => {
         if (dayEvents && dayEvents.length > 0) {
-          const eventDate = parseISO(date);
+          const eventDate = safeParseDateString(date);
+          
+          if (!eventDate) return;
           
           dayEvents.forEach(event => {
-            if (event.type.includes('missed')) {
+            if (event.type && event.type.includes('missed')) {
               allMissedEvents.push({ ...event, date, eventDate });
             }
           });
         }
       });
 
-          allMissedEvents.sort((a, b) => {
-            if (!a.eventDate || !b.eventDate || !isValid(a.eventDate) || !isValid(b.eventDate)) return 0;
-            return b.eventDate.getTime() - a.eventDate.getTime();
-          });
+      allMissedEvents.sort((a, b) => {
+        if (!a.eventDate || !b.eventDate || !isValid(a.eventDate) || !isValid(b.eventDate)) return 0;
+        return b.eventDate.getTime() - a.eventDate.getTime();
+      });
+      
       setMissedEvents(allMissedEvents.slice(0, newLimit));
       setLoadingMore(false);
     }, 500);
@@ -546,7 +648,7 @@ export default function Schedule() {
 
   const renderEventItem = (event, showDate = true) => (
     <View key={`${event.id}-${event.date}`} style={styles.eventItem}>
-      <View style={[styles.eventIcon, { backgroundColor: getEventColor(event.type) }]}>
+      <View style={[styles.eventIcon, { backgroundColor: getEventColor(event.type, event.completed) }]}>
         <Ionicons 
           name={getEventIcon(event.type)} 
           size={20} 
@@ -554,7 +656,7 @@ export default function Schedule() {
         />
       </View>
       <View style={styles.eventInfo}>
-        <Text style={styles.eventName}>{event.name}</Text>
+        <Text style={styles.eventName}>{event.name || 'Unknown'}</Text>
         <Text style={styles.eventType}>
           {event.type && event.type.includes('class') ? 'Class' : 'Payday'}
           {showDate && event.date && ` • ${format(safeParseDateString(event.date) || new Date(), 'MM/dd')}`}
@@ -566,88 +668,135 @@ export default function Schedule() {
           <Text style={styles.eventAmount}>Tk. {event.amount}</Text>
         )}
       </View>
-      <TouchableOpacity style={styles.eventArrow}>
+      <TouchableOpacity 
+        style={styles.eventArrow}
+        onPress={() => {
+          setSelectedEvents([event]);
+          setCurrentEventIndex(0);
+          setSelectedDate(event.date);
+          setModalVisible(true);
+        }}
+      >
         <Ionicons name="chevron-forward" size={20} color="#666" />
       </TouchableOpacity>
     </View>
   );
 
-  const renderEventModal = () => (
-    <Modal
-      visible={modalVisible}
-      transparent={true}
-      animationType="slide"
-      onRequestClose={() => setModalVisible(false)}
-    >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>
-              Events for {format(safeParseDateString(selectedDate) || new Date(), 'MMMM dd, yyyy')}
-            </Text>
-            <TouchableOpacity 
-              onPress={() => setModalVisible(false)}
-              style={styles.modalCloseButton}
-            >
-              <Ionicons name="close" size={24} color="#fff" />
-            </TouchableOpacity>
+  const renderEventModal = () => {
+    const currentEvent = selectedEvents[currentEventIndex];
+    const eventDate = safeParseDateString(currentEvent?.date);
+    const todayEvent = eventDate && isToday(eventDate);
+    const isTodayClass = todayEvent && currentEvent?.type === 'class'; // Fix: Only for today's classes, not missed ones
+    const isMissedClass = currentEvent?.type === 'missed-class';
+
+    return (
+      <Modal
+        visible={modalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                Events for {format(safeParseDateString(selectedDate) || new Date(), 'MMMM dd, yyyy')}
+              </Text>
+              <TouchableOpacity 
+                onPress={() => setModalVisible(false)}
+                style={styles.modalCloseButton}
+              >
+                <Ionicons name="close" size={24} color="#fff" />
+              </TouchableOpacity>
+            </View>
+            
+            {selectedEvents.length > 1 && (
+              <View style={styles.eventNavigation}>
+                <TouchableOpacity
+                  onPress={() => setCurrentEventIndex(Math.max(0, currentEventIndex - 1))}
+                  disabled={currentEventIndex === 0}
+                  style={[styles.navButton, currentEventIndex === 0 && styles.navButtonDisabled]}
+                >
+                  <Ionicons name="chevron-back" size={20} color="#fff" />
+                </TouchableOpacity>
+                
+                <Text style={styles.eventCounter}>
+                  {currentEventIndex + 1} of {selectedEvents.length}
+                </Text>
+                
+                <TouchableOpacity
+                  onPress={() => setCurrentEventIndex(Math.min(selectedEvents.length - 1, currentEventIndex + 1))}
+                  disabled={currentEventIndex === selectedEvents.length - 1}
+                  style={[styles.navButton, currentEventIndex === selectedEvents.length - 1 && styles.navButtonDisabled]}
+                >
+                  <Ionicons name="chevron-forward" size={20} color="#fff" />
+                </TouchableOpacity>
+              </View>
+            )}
+            
+            {currentEvent && (
+              <View style={[
+                styles.modalEventCard,
+                { borderLeftColor: getEventColor(currentEvent.type, currentEvent.completed) }
+              ]}>
+                <Text style={styles.modalEventName}>{currentEvent.name}</Text>
+                <Text style={styles.modalEventType}>
+                  {currentEvent.type.includes('class') ? 'Class' : 'Payday'}
+                </Text>
+                {currentEvent.subject && (
+                  <Text style={styles.modalEventDetail}>
+                    Subject: {currentEvent.subject}
+                  </Text>
+                )}
+                {currentEvent.amount && (
+                  <Text style={styles.modalEventDetail}>
+                    Amount: Tk. {currentEvent.amount}
+                  </Text>
+                )}
+                <Text style={styles.modalEventDetail}>
+                  Time: {currentEvent.time}
+                </Text>
+                <Text style={styles.modalEventDetail}>
+                  Status: {currentEvent.completed ? 'Completed' : 'Pending'}
+                </Text>
+                
+                {/* Action Buttons Container */}
+                <View style={styles.modalActionsContainer}>
+                  {/* Start Class button for today's classes only */}
+                  {isTodayClass && (
+                    <TouchableOpacity 
+                      style={styles.startClassButton}
+                      onPress={() => {
+                        setModalVisible(false);
+                        console.log('Navigate to start class page for:', currentEvent.id);
+                        // navigation.navigate('StartClass', { event: currentEvent });
+                      }}
+                    >
+                      <Text style={styles.startClassButtonText}>Start Class</Text>
+                    </TouchableOpacity>
+                  )}
+                  
+                  {/* Make Up button for missed classes */}
+                  {isMissedClass && (
+                    <TouchableOpacity 
+                      style={styles.makeUpButton}
+                      onPress={() => {
+                        setModalVisible(false);
+                        console.log('Navigate to make up page for:', currentEvent.id);
+                        // navigation.navigate('MakeUp', { event: currentEvent });
+                      }}
+                    >
+                      <Text style={styles.makeUpButtonText}>Make Up</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            )}
           </View>
-          
-          {selectedEvents.length > 1 && (
-            <View style={styles.eventNavigation}>
-              <TouchableOpacity
-                onPress={() => setCurrentEventIndex(Math.max(0, currentEventIndex - 1))}
-                disabled={currentEventIndex === 0}
-                style={[styles.navButton, currentEventIndex === 0 && styles.navButtonDisabled]}
-              >
-                <Ionicons name="chevron-back" size={20} color="#fff" />
-              </TouchableOpacity>
-              
-              <Text style={styles.eventCounter}>
-                {currentEventIndex + 1} of {selectedEvents.length}
-              </Text>
-              
-              <TouchableOpacity
-                onPress={() => setCurrentEventIndex(Math.min(selectedEvents.length - 1, currentEventIndex + 1))}
-                disabled={currentEventIndex === selectedEvents.length - 1}
-                style={[styles.navButton, currentEventIndex === selectedEvents.length - 1 && styles.navButtonDisabled]}
-              >
-                <Ionicons name="chevron-forward" size={20} color="#fff" />
-              </TouchableOpacity>
-            </View>
-          )}
-          
-          {selectedEvents[currentEventIndex] && (
-            <View style={[
-              styles.modalEventCard,
-              { borderLeftColor: getEventColor(selectedEvents[currentEventIndex].type) }
-            ]}>
-              <Text style={styles.modalEventName}>{selectedEvents[currentEventIndex].name}</Text>
-              <Text style={styles.modalEventType}>
-                {selectedEvents[currentEventIndex].type.includes('class') ? 'Class' : 'Payday'}
-              </Text>
-              {selectedEvents[currentEventIndex].subject && (
-                <Text style={styles.modalEventDetail}>
-                  Subject: {selectedEvents[currentEventIndex].subject}
-                </Text>
-              )}
-              {selectedEvents[currentEventIndex].amount && (
-                <Text style={styles.modalEventDetail}>
-                  Amount: Tk. {selectedEvents[currentEventIndex].amount}
-                </Text>
-              )}
-              <Text style={styles.modalEventDetail}>
-                Time: {selectedEvents[currentEventIndex].time}
-              </Text>
-              <Text style={styles.modalEventDetail}>
-                Status: {selectedEvents[currentEventIndex].completed ? 'Completed' : 'Pending'}
-              </Text>
-            </View>
-          )}
         </View>
-      </View>
-    </Modal>
-  );
+      </Modal>
+    );
+  };
 
   if (loading) {
     return (
@@ -667,7 +816,6 @@ export default function Schedule() {
         }
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity 
             onPress={() => navigation.goBack()}
@@ -678,7 +826,6 @@ export default function Schedule() {
           <Text style={styles.headerTitle}>My Schedule</Text>
         </View>
 
-        {/* Calendar */}
         <View style={styles.calendarContainer}>
           <Calendar
             current={format(currentDate, 'yyyy-MM-dd')}
@@ -710,7 +857,6 @@ export default function Schedule() {
           />
         </View>
 
-        {/* Upcoming Events */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Upcoming Events</Text>
           {upcomingEvents.length > 0 ? (
@@ -725,7 +871,6 @@ export default function Schedule() {
           )}
         </View>
 
-        {/* Missed Events */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Missed Events</Text>
           {missedEvents.length > 0 ? (
@@ -798,8 +943,8 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     marginBottom: 30,
     borderRadius: 15,
-    backgroundColor: '#1a1a1a',
     overflow: 'hidden',
+    backgroundColor: '#1a1a1a',
   },
   section: {
     marginHorizontal: 20,
@@ -947,5 +1092,35 @@ const styles = StyleSheet.create({
     color: '#ccc',
     fontSize: 14,
     marginBottom: 8,
+  },
+  modalActionsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+    gap: 10,
+  },
+  startClassButton: {
+    flex: 1,
+    backgroundColor: '#4CAF50',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  startClassButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  makeUpButton: {
+    flex: 1,
+    backgroundColor: '#FF9800',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  makeUpButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

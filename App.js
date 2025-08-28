@@ -16,6 +16,7 @@ import TuitionDetailScreen from './components/screens/TuitionDetailScreen';
 import AddTuitionScreen from './components/screens/AddTuitionScreen';
 import Schedule from './components/Schedule/Schedule';
 import Payday from './components/Payday/Payday';
+import Class from './components/Class/Class';
 
 import { AuthProvider } from './contexts/AuthContext'; 
 
@@ -31,6 +32,7 @@ export default function App() {
           <Stack.Screen name="Mainpage" component={Mainpage} />
           <Stack.Screen name="Schedule" component={Schedule} />
           <Stack.Screen name="Payday" component={Payday} />
+          <Stack.Screen name="Class" component={Class} />
           <Stack.Screen name="Profile" component={Profile} />
           <Stack.Screen name="Conversations" component={ConversationsScreen} />
           <Stack.Screen name="DirectChat" component={DirectChatScreen} />
