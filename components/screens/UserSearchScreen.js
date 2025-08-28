@@ -154,8 +154,14 @@ const UserSearchScreen = ({ navigation }) => {
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backTxt}>← Back</Text>
+        <TouchableOpacity
+          accessibilityLabel="Open menu"
+          style={styles.drawerButton}
+          onPress={() => navigation.openDrawer()}
+        >
+          <View style={styles.hamburgerLine} />
+          <View style={styles.hamburgerLine} />
+          <View style={styles.hamburgerLine} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Find Users</Text>
         <View style={{ width: 60 }} />
@@ -272,6 +278,20 @@ const styles = StyleSheet.create({
   loading: { paddingVertical: 20, alignItems: 'center' },
   empty: { paddingVertical: 28, alignItems: 'center' },
   emptyText: { color: '#bbb', fontSize: 14 },
+  drawerButton: {
+    width: 34,
+    height: 34,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  hamburgerLine: {
+    width: 20,
+    height: 2,
+    backgroundColor: ACCENT,
+    marginVertical: 2,
+    borderRadius: 1,
+  },
 });
 
 export default UserSearchScreen;

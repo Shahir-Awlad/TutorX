@@ -40,7 +40,7 @@ export default function Login() {
         setPassword('');
         console.log("Login success:", user.email);
         //onLoginSuccess();
-        navigation.replace('Mainpage');
+        navigation.reset({ index: 0, routes: [{ name: 'App' }] });
       })
       .catch((error) => {
         if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-email') {

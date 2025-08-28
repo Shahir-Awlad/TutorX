@@ -39,9 +39,9 @@ export default function TabBar() {
         >
           {/* Fix active route name to match your screen: 'Conversations' */}
           <Ionicons
-            name={isActive('Conversations') || isActive('DirectChat') || isActive('UserSearch') ? 'chatbubble' : 'chatbubble-outline'}
+            name={isActive('ConversationsHome') || isActive('DirectChat') || isActive('UserSearch') ? 'chatbubble' : 'chatbubble-outline'}
             size={28}
-            color={isActive('Conversations') || isActive('DirectChat') || isActive('UserSearch')? '#C1FF72' : '#acacacff'}
+            color={isActive('ConversationsHome') || isActive('DirectChat') || isActive('UserSearch')? '#C1FF72' : '#acacacff'}
           />
         </TouchableOpacity>
 
@@ -50,9 +50,9 @@ export default function TabBar() {
           onPress={() => navigation.navigate('Tuition')}
         >
           <Ionicons
-            name={isActive('Tuition') || isActive('TuitionDetail') || isActive('AddTuition') ? 'school' : 'school-outline'}
+            name={isActive('TuitionsHome') || isActive('TuitionDetail') || isActive('AddTuition') ? 'school' : 'school-outline'}
             size={28}
-            color={isActive('Tuition') || isActive('TuitionDetail') || isActive('AddTuition') ? '#C1FF72' : '#acacacff'}
+            color={isActive('TuitionsHome') || isActive('TuitionDetail') || isActive('AddTuition') ? '#C1FF72' : '#acacacff'}
           />
         </TouchableOpacity>
 

@@ -9,22 +9,25 @@ import {
   StatusBar,
   Platform,
 } from 'react-native';
-import { signOut } from 'firebase/auth';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { auth, db } from '../../firebaseConfig';
+import { db } from '../../firebaseConfig';
 import { useAuth } from '../../contexts/AuthContext';
 import TabBar from '../Navigation/TabBar';
+
+const ACCENT = '#C1FF72';
 
 const ConversationsScreen = ({ navigation }) => {
   const [conversations, setConversations] = useState([]);
   const { user } = useAuth();
 
+  // If user logs out (AuthContext becomes null), reset to Login
   useEffect(() => {
     if (!user) {
       navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
     }
   }, [user, navigation]);
 
+  // Listen to my conversations
   useEffect(() => {
     if (!user?.uid) {
       setConversations([]);
@@ -39,31 +42,28 @@ const ConversationsScreen = ({ navigation }) => {
     const unsubscribe = onSnapshot(
       q,
       (querySnapshot) => {
-        const conversationsData = [];
+        const list = [];
         querySnapshot.forEach((doc) => {
           const data = doc.data();
-          const otherParticipantId = data.participants.find((id) => id !== user.uid);
-          const otherParticipant = data.participantDetails?.[otherParticipantId];
+          const otherId = data.participants.find((id) => id !== user.uid);
+          const other = data.participantDetails?.[otherId];
 
-          if (otherParticipant) {
-            conversationsData.push({
+          if (other) {
+            list.push({
               id: doc.id,
               ...data,
-              otherParticipant: {
-                id: otherParticipantId,
-                ...otherParticipant,
-              },
+              otherParticipant: { id: otherId, ...other },
             });
           }
         });
 
-        conversationsData.sort((a, b) => {
+        list.sort((a, b) => {
           const aTime = a.lastMessageTime?.seconds || 0;
           const bTime = b.lastMessageTime?.seconds || 0;
           return bTime - aTime;
         });
 
-        setConversations(conversationsData);
+        setConversations(list);
       },
       (error) => console.error('Error fetching conversations:', error)
     );
@@ -71,23 +71,11 @@ const ConversationsScreen = ({ navigation }) => {
     return unsubscribe;
   }, [user?.uid]);
 
-  const handleLogout = async () => {
-    try {
-      setConversations([]);
-      await signOut(auth);
-      navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-  };
-
   const formatTime = (timestamp) => {
     if (!timestamp) return '';
     const date = timestamp.toDate();
     const now = new Date();
-    const diffTime = now - date;
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-
+    const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
     if (diffDays === 0)
       return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     if (diffDays === 1) return 'Yesterday';
@@ -134,8 +122,23 @@ const ConversationsScreen = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#111" />
+
+      {/* ===== Screen header ===== */}
       <View style={styles.header}>
+        {/* 1) OPEN THE DRAWER */}
+        <TouchableOpacity
+          accessibilityLabel="Open menu"
+          style={styles.drawerButton}
+          onPress={() => navigation.openDrawer()}
+        >
+          <View style={styles.hamburgerLine} />
+          <View style={styles.hamburgerLine} />
+          <View style={styles.hamburgerLine} />
+        </TouchableOpacity>
+
         <Text style={styles.headerTitle}>Messages</Text>
+
+        {/* 2) Keep your screen-specific actions (no logout here; it's in the drawer) */}
         <View style={styles.headerActions}>
           <TouchableOpacity
             style={styles.circleBtn}
@@ -143,13 +146,10 @@ const ConversationsScreen = ({ navigation }) => {
           >
             <Text style={styles.circleBtnText}>+</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.secondaryBtn} onPress={handleLogout}>
-            <Text style={styles.secondaryBtnText}>Logout</Text>
-          </TouchableOpacity>
         </View>
       </View>
 
-      {/* Card */}
+      {/* ===== Content card ===== */}
       <View style={styles.card}>
         <FlatList
           data={conversations}
@@ -163,14 +163,15 @@ const ConversationsScreen = ({ navigation }) => {
             </View>
           }
           contentContainerStyle={{ paddingVertical: 8 }}
+          showsVerticalScrollIndicator={false}
         />
       </View>
-      <TabBar/>
+
+      {/* Your existing bottom tab bar */}
+      <TabBar />
     </SafeAreaView>
   );
 };
-
-const ACCENT = '#C1FF72';
 
 const styles = StyleSheet.create({
   container: {
@@ -186,7 +187,28 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  headerTitle: { color: ACCENT, fontSize: 18, fontWeight: 'bold', marginLeft: 15 },
+  drawerButton: {
+    width: 34,
+    height: 34,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  hamburgerLine: {
+    width: 20,
+    height: 2,
+    backgroundColor: ACCENT,
+    marginVertical: 2,
+    borderRadius: 1,
+  },
+  headerTitle: { 
+    color: ACCENT, 
+    fontSize: 18, 
+    fontWeight: 'bold', 
+    flex: 1, 
+    textAlign: 'center',
+    marginRight: 44, // balance the menu button width
+  },
   headerActions: { flexDirection: 'row', alignItems: 'center' },
   circleBtn: {
     width: 34,
@@ -195,16 +217,8 @@ const styles = StyleSheet.create({
     backgroundColor: ACCENT,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
   },
   circleBtnText: { color: '#000', fontSize: 20, fontWeight: 'bold' },
-  secondaryBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-    backgroundColor: '#2e2e2e',
-  },
-  secondaryBtnText: { color: '#fff', fontWeight: '600' },
 
   card: {
     flex: 1,
