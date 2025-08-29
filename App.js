@@ -40,6 +40,13 @@ function TuitionStack() {
     </Stack.Navigator>
   )
 }
+function ScheduleStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="ScheduleHome" component={Schedule} />
+    </Stack.Navigator>
+  )
+}
 
 function ConversationStack() {
   return (
@@ -72,6 +79,7 @@ function AppDrawer() {
       <Drawer.Screen name="Conversations" component={ConversationStack} />
       <Drawer.Screen name="Tuition" component={TuitionStack} />
       <Drawer.Screen name="Profile" component={Profile} />
+      <Drawer.Screen name="Schedule" component={ScheduleStack} />
       <Drawer.Screen name="DirectChat" component={DirectChatScreen} />
       <Drawer.Screen name="UserSearch" component={UserSearchScreen} />
     </Drawer.Navigator>
