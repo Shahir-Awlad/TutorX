@@ -668,7 +668,14 @@ const generateAndFetchEvents = async () => {
                     onPress={() => {
                       setModalVisible(false);
                       console.log('Start Class button pressed for:', currentEvent.id);
-                      // Later: navigation logic
+                      navigation.navigate('Class', {
+                        studentName: currentEvent.name,
+                        subject: currentEvent.subject,
+                        tuitionId: currentEvent.tuitionId,
+                        eventId: currentEvent.id,
+                        date: selectedDate,
+                        eventType: currentEvent.type,
+                      });
                     }}
                   >
                     <Text style={styles.startClassButtonText}>Start Class</Text>
