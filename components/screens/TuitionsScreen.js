@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
 
   fab: { position: 'absolute', right: 20, 
     bottom: Platform.select({
-      ios: 24,
+      ios: 84,
       android: 90,
       web: 90, 
     }),  width: 56, height: 56, borderRadius: 28, backgroundColor: ACCENT, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 6, elevation: 6 },

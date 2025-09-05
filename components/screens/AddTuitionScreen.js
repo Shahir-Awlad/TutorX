@@ -216,7 +216,7 @@ const AddTuitionScreen = ({ navigation }) => {
       </View>
 
       {/* No FlatList inside this ScrollView */}
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 30 }}>
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 70 }}>
         <View style={styles.card}>
           {/* Search & pick user */}
           <Text style={styles.fieldLabel}>Find {counterpartLabel} (username or email)</Text>
