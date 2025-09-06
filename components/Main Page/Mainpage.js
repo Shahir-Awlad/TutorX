@@ -1,14 +1,23 @@
-
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import TabBar from '../Navigation/TabBar';
 import { Ionicons } from '@expo/vector-icons';
 
 const ACCENT = '#C1FF72';
+
+// Avatar mapping
+const avatarMap = {
+  'sameen4': require('../../assets/Avatars/avatar-6.png'),
+  'Sameen Yeaser': require('../../assets/Avatars/avatar-6.png'),
+  'aimoon1': require('../../assets/Avatars/avatar-4.png'),
+  'Aimaan Ahmed': require('../../assets/Avatars/avatar-4.png'),
+  'tausif1': require('../../assets/Avatars/avatar-5.jpg'),
+  'default': require('../../assets/default_user.jpg')
+};
 
 export default function Mainpage() {
   const navigation = useNavigation();
@@ -19,47 +28,156 @@ export default function Mainpage() {
     profileImage: null
   });
 
-  // Static data
-  const [runningTuitions, setRunningTuitions] = useState(2);
-  const [scheduleData, setScheduleData] = useState([
-    {
-      id: 1,
-      name: "Mirza Amir",
-      subject: "Physics",
-      date: "03/26",
-      profileImage: null
-    },
-    {
-      id: 2,
-      name: "Asif Shah",
-      subject: "Home Edu",
-      date: "03/31",
-      profileImage: null
-    }
-  ]);
+  const [scheduleLoading, setScheduleLoading] = useState(true);
+  const [paydayLoading, setPaydayLoading] = useState(true);
 
-  const [paydayData, setPaydayData] = useState([
-    {
-      id: 1,
-      name: "Mirza Amir",
-      amount: "Tk. 9000",
-      date: "03/24",
-      status: "overdue", 
-      profileImage: null
-    },
-    {
-      id: 2,
-      name: "Asif Shah",
-      amount: "Tk. 8000",
-      date: "04/08",
-      status: "upcoming",
-      profileImage: null
+  const [runningTuitions, setRunningTuitions] = useState(0);
+  const [scheduleData, setScheduleData] = useState([]);
+  const [paydayData, setPaydayData] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const getAvatarForUsername = (name) => {
+    return avatarMap[name] || avatarMap.default;
+  };
+
+  const getCurrentMonthYear = () => {
+    const now = new Date();
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    return `${months[now.getMonth()]} ${now.getFullYear()}`;
+  };
+
+  const formatDate = (dateStr) => {
+    const date = new Date(dateStr);
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${month}/${day}`;
+  };
+
+  const isUpcoming = (dateStr) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const eventDate = new Date(dateStr);
+    eventDate.setHours(0, 0, 0, 0);
+    return eventDate >= today;
+  };
+
+  const getUsernameFromStudentName = async (studentName) => {
+    try {
+      const auth = getAuth();
+      const user = auth.currentUser;
+      if(!user){
+        console.log('No authenticated user found.');
+        return null;
+      }
+      const usersCollectionRef = collection(db, 'Users');
+      const usersSnapshot = await getDocs(usersCollectionRef);
+      
+      for (const userDoc of usersSnapshot.docs) {
+        const userData = userDoc.data();
+        if (userData.name === studentName) {
+          return userData.username;
+        }
+      }
+      return null;
+    } catch (error) {
+      console.error('Error fetching username from student name:', error);
+      return null;
     }
-  ]);
+  };
+
+  const fetchRunningTuitions = async (username) => {
+    try {
+      const userDocRef = doc(db, 'Users', username);
+      const tuitionsCollectionRef = collection(userDocRef, 'tuitions');
+      const tuitionsSnapshot = await getDocs(tuitionsCollectionRef);
+      setRunningTuitions(tuitionsSnapshot.size);
+    } catch (error) {
+      console.error('Error fetching running tuitions:', error);
+      setRunningTuitions(0);
+    }
+  };
+
+  const fetchScheduleAndPaydayData = async (username) => {
+    try {
+      const currentMonthYear = getCurrentMonthYear();
+      const userDocRef = doc(db, 'Users', username);
+      const scheduleCollectionRef = collection(userDocRef, 'Schedule');
+      const monthDocRef = doc(scheduleCollectionRef, currentMonthYear);
+      const monthDocSnap = await getDoc(monthDocRef);
+
+      if (monthDocSnap.exists()) {
+        const monthData = monthDocSnap.data();
+        const upcomingClasses = [];
+        const upcomingPaydays = [];
+        const today = new Date();
+
+        // Single loop through all data
+        Object.keys(monthData).forEach(dateKey => {
+          if (dateKey.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            const dateEvents = monthData[dateKey];
+            
+            if (typeof dateEvents === 'object' && dateEvents !== null) {
+              Object.keys(dateEvents).forEach(eventKey => {
+                const event = dateEvents[eventKey];
+                
+                if (event && isUpcoming(dateKey)) {
+                  const eventDate = new Date(dateKey);
+                  
+                  if (event.type === 'payday') {
+                    // Handle payday
+                    const diffTime = eventDate - today;
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    
+                    upcomingPaydays.push({
+                      id: `${dateKey}_${eventKey}`,
+                      name: event.name || 'Unknown',
+                      amount: `Tk. ${event.amount || '0'}`,
+                      date: formatDate(dateKey),
+                      status: diffDays < 0 ? 'overdue' : 'upcoming',
+                      profileImage: getAvatarForUsername(event.name || 'default'),
+                      sortDate: eventDate
+                    });
+                  } else {
+                    // Handle regular class
+                    upcomingClasses.push({
+                      id: `${dateKey}_${eventKey}`,
+                      name: event.name || 'Unknown',
+                      subject: event.subject || 'Unknown Subject',
+                      date: formatDate(dateKey),
+                      profileImage: getAvatarForUsername(event.name || 'default'),
+                      sortDate: eventDate
+                    });
+                  }
+                }
+              });
+            }
+          }
+        });
+
+        // Sort and limit results
+        upcomingClasses.sort((a, b) => a.sortDate - b.sortDate);
+        upcomingPaydays.sort((a, b) => a.sortDate - b.sortDate);
+        
+        setScheduleData(upcomingClasses.slice(0, 2));
+        setPaydayData(upcomingPaydays.slice(0, 2));
+      } else {
+        setScheduleData([]);
+        setPaydayData([]);
+      }
+    } catch (error) {
+      console.error('Error fetching schedule and payday data:', error);
+      setScheduleData([]);
+      setPaydayData([]);
+    }
+  };
 
   useEffect(() => {
     const fetchUserData = async () => {
       try {
+        setLoading(true);
         // Get the currently logged-in user
         const auth = getAuth();
         const user = auth.currentUser;
@@ -70,20 +188,30 @@ export default function Mainpage() {
           
           if (userDocSnap.exists()) {
             const userData = userDocSnap.data();
+            const username = userData.username || "Unknown";
+            
             setUserData({
               name: userData.name || "No Name",
-              username: userData.username || "No Username",
+              username: username,
               role: userData.type || "No Role",
+              profileImage: getAvatarForUsername(username)
             });
+
+            // Fetch dynamic data
+            await Promise.all([
+              fetchRunningTuitions(user.uid),
+              fetchScheduleAndPaydayData(user.uid)
+            ]);
           } else {
             console.log('No user document found!');
             setUserData({
               name: "User Not Found",
               username: "Unknown",
               role: "Unknown",
-              profileImage: null
+              profileImage: avatarMap.default
             });
           }
+
         }
       } catch (error) {
         console.error('Error fetching user data:', error);
@@ -91,8 +219,10 @@ export default function Mainpage() {
           name: "Error Loading",
           username: "Error",
           role: "Error",
-          profileImage: null
+          profileImage: avatarMap.default
         });
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -106,7 +236,6 @@ export default function Mainpage() {
   const handleViewAllSchedule = () => {
     navigation.navigate('Schedule'); 
   };
-
 
   const handleViewAllPayday = () => {
     console.log('Navigate to Payday page');
@@ -125,11 +254,7 @@ export default function Mainpage() {
 
   const renderProfileImage = () => (
     <View style={styles.profileImageContainer}>
-      {userData.profileImage ? (
-        <Image source={{ uri: userData.profileImage }} style={styles.profileImage} />
-      ) : (
-        <View style={styles.profileImagePlaceholder} />
-      )}
+      <Image source={userData.profileImage} style={styles.profileImage} />
     </View>
   );
 
@@ -137,11 +262,7 @@ export default function Mainpage() {
     <View key={item.id} style={styles.listItem}>
       <View style={styles.listItemLeft}>
         <View style={styles.listProfileImageContainer}>
-          {item.profileImage ? (
-            <Image source={{ uri: item.profileImage }} style={styles.listProfileImage} />
-          ) : (
-            <View style={styles.listProfileImagePlaceholder} />
-          )}
+          <Image source={item.profileImage} style={styles.listProfileImage} />
         </View>
         <View style={styles.listItemInfo}>
           <Text style={styles.listItemName}>{item.name}</Text>
@@ -160,10 +281,16 @@ export default function Mainpage() {
     </View>
   );
 
+  const renderEmptyState = (message) => (
+    <View style={styles.emptyStateContainer}>
+      <Text style={styles.emptyStateText}>{message}</Text>
+    </View>
+  );
+
   return (
     <View style={styles.mainContainer}>
-      <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
-        {/* Header Section */}
+
+    {/* Header Section */}
         <View style={styles.header}>
           <TouchableOpacity
             accessibilityLabel="Open menu"
@@ -174,19 +301,15 @@ export default function Mainpage() {
             <View style={styles.hamburgerLine} />
             <View style={styles.hamburgerLine} />
           </TouchableOpacity>
-          
-          {/* <View style={styles.logoContainer}>
-            <Text style={styles.logo}>TUTORX</Text>
-            <Text style={styles.logoSubtext}>TUTORING APP</Text>
-          </View> */}
 
           <Image source={require('../../assets/Logo cropped.png')} style={styles.logo} resizeMode="contain" />
 
-
           <TouchableOpacity style={styles.notificationButton}>
-            <Ionicons name="notifications" size={24} color="#ffffff" />
+            <Ionicons name="notifications" size={24} color="#000" />
           </TouchableOpacity>
         </View>
+      <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false} paddingBottom={100}>
+        <View style={{ height: 15 }} />
 
         {/* Welcome Section */}
         <View style={styles.welcomeSection}>
@@ -206,7 +329,9 @@ export default function Mainpage() {
           </View>
           <View style={styles.cardRight}>
             <View style={styles.tuitionCountBadge}>
-              <Text style={styles.tuitionCount}>{runningTuitions.toString().padStart(2, '0')}</Text>
+              <Text style={styles.tuitionCount}>
+                {loading ? '00' : runningTuitions.toString().padStart(2, '0')}
+              </Text>
             </View>
           </View>
         </TouchableOpacity>
@@ -220,7 +345,13 @@ export default function Mainpage() {
             </TouchableOpacity>
           </View>
           <View style={styles.listContainer}>
-            {scheduleData.map(item => renderListItem(item, false))}
+            {loading ? (
+              renderEmptyState("Loading...")
+            ) : scheduleData.length === 0 ? (
+              renderEmptyState("No upcoming events")
+            ) : (
+              scheduleData.map(item => renderListItem(item, false))
+            )}
           </View>
         </View>
 
@@ -228,14 +359,23 @@ export default function Mainpage() {
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Payday</Text>
-            <TouchableOpacity onPress={handleViewAllPayday}>
+            {/* <TouchableOpacity onPress={handleViewAllPayday}>
               <Text style={styles.viewAllButton}>View All</Text>
-            </TouchableOpacity>
+            </TouchableOpacity> */}
           </View>
           <View style={styles.listContainer}>
-            {paydayData.map(item => renderListItem(item, true))}
+            {loading ? (
+              renderEmptyState("Loading...")
+            ) : paydayData.length === 0 ? (
+              renderEmptyState("No upcoming paydays")
+            ) : (
+              paydayData.map(item => renderListItem(item, true))
+            )}
           </View>
         </View>
+
+        <View style={{ height: 100 }} />
+        
       </ScrollView>
       <TabBar />
     </View>    
@@ -256,7 +396,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingTop: 50,
-    paddingBottom: 30,
+    paddingBottom: 0,
   },
   menuButton: {
     padding: 10,
@@ -380,8 +520,8 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     backgroundColor: '#1a1a1a',
-    borderRadius: 15,
-    padding: 15,
+    borderRadius: 25,
+    paddingBottom: 15,paddingLeft: 15,paddingRight: 15,
   },
   listItem: {
     flexDirection: 'row',
@@ -398,6 +538,7 @@ const styles = StyleSheet.create({
   },
   listProfileImageContainer: {
     marginRight: 15,
+    //borderRadius: 25,
   },
   listProfileImage: {
     width: 50,
@@ -449,5 +590,13 @@ const styles = StyleSheet.create({
     marginVertical: 2,
     borderRadius: 1,
   },
+  emptyStateContainer: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  emptyStateText: {
+    color: '#888888',
+    fontSize: 16,
+    fontStyle: 'italic',
+  },
 });
-

@@ -44,7 +44,7 @@ function ScheduleStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="ScheduleHome" component={Schedule} />
-      <Stack.Screen name="Class" component={Class} />
+      <Drawer.Screen name="Class" component={Class} />
     </Stack.Navigator>
   )
 }
