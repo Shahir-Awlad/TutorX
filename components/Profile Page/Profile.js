@@ -26,6 +26,19 @@ import TabBar from '../Navigation/TabBar';
 
 const { width, height } = Dimensions.get('window');
 
+const avatarMap = {
+  'sameen4': require('../../assets/Avatars/avatar-6.png'),
+  'Sameen Yeaser': require('../../assets/Avatars/avatar-6.png'),
+  'aimoon1': require('../../assets/Avatars/avatar-4.png'),
+  'Aimaan Ahmed': require('../../assets/Avatars/avatar-4.png'),
+  'tausif1': require('../../assets/Avatars/avatar-5.jpg'),
+  'default': require('../../assets/default_user.jpg')
+};
+
+const getAvatarForUsername = (identifier) => {
+  return avatarMap[identifier] || avatarMap.default;
+};
+
 export default function Profile() {
   const [userData, setUserData] = useState({
     username: '',
@@ -275,7 +288,7 @@ export default function Profile() {
                 source={
                   userData.imageUrl
                     ? { uri: userData.imageUrl }
-                    : require('../../assets/default_user.jpg') 
+                    : getAvatarForUsername(userData.username)
                 }
                 style={styles.profileImage}
                 onError={() => {
@@ -698,16 +711,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   profileImageContainer: {
-    width: 110,
-    height: 110,
-    borderRadius: 55,
-    backgroundColor: '#ccc',
+    width: 130,
+    height: 130,
+    borderRadius: 75,
+    //backgroundColor: '#ccc',
     overflow: 'hidden',
     elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    shadowColor: '#ffffffff',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.2,
+    shadowRadius: 15,
     marginBottom: 15,
     top: -10,
   },

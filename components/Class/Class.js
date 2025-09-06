@@ -84,7 +84,7 @@ export default function Class() {
       const today = format(new Date(), 'MM/dd/yyyy');
       setCurrentDate(today);
 
-      // Get class info from route params if available
+     
       if (route.params) {
         setStudentName(route.params.studentName || 'Student');
         setSubject(route.params.subject || 'Subject');

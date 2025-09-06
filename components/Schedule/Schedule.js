@@ -130,86 +130,135 @@ export default function Schedule() {
     Alert.alert('Error', 'Failed to load schedule data');
   }
 };
-const generateEventsForMonth = (date, tuitions, role) => {
+
+const generateTodayEvents = async (user, monthKey, existingEvents, tuitions, userRole) => {
+  const today = new Date();
+  const todayKey = format(today, 'yyyy-MM-dd');
+  const todayDayIndex = today.getDay();
+  
+  console.log(`Checking today (${todayKey}) - day index: ${todayDayIndex}`);
+  
+  // Check if today already has events in database
+  let existingTodayEvents = [];
+  if (existingEvents[todayKey]) {
+    existingTodayEvents = existingEvents[todayKey];
+    console.log(`Found ${existingTodayEvents.length} existing events for today`);
+  }
+  
+  // Get tuition IDs that already have events today
+  const existingTuitionIds = existingTodayEvents.map(event => event.tuitionId);
+  
+  // Check each tuition to see if it should have a class today
+  const newTodayEvents = [];
+  
+  tuitions.forEach(tuition => {
+    const { scheduleDays = [], studentName, teacherName, subjects = [] } = tuition;
+    
+    // Skip if this tuition already has an event today
+    if (existingTuitionIds.includes(tuition.id)) {
+      console.log(`Tuition ${tuition.id} already has event for today, skipping`);
+      return;
+    }
+    
+    // Check if today is a scheduled day for this tuition
+    if (scheduleDays.includes(todayDayIndex)) {
+      console.log(`Tuition ${tuition.id} should have class today, generating event`);
+      
+      const displayName = userRole === 'Teacher' ? studentName : teacherName;
+      
+      newTodayEvents.push({
+        id: `${tuition.id}-class-${todayKey}`,
+        type: 'class',
+        tuitionId: tuition.id,
+        name: displayName,
+        subject: subjects[0] || 'General',
+        completed: false,
+        time: 'All Day'
+      });
+    }
+  });
+  
+  // Combine existing and new events for today
+  const allTodayEvents = [...existingTodayEvents, ...newTodayEvents];
+  
+  if (allTodayEvents.length > 0) {
+    return { [todayKey]: allTodayEvents };
+  }
+  
+  return {};
+};
+
+const generateFutureEventsForMonth = (date, tuitions, role) => {
   const monthStart = startOfMonth(date);
   const monthEnd = endOfMonth(date);
   const generatedEvents = {};
   const today = new Date();
-
-  console.log('generateEventsForMonth called with tuitions:', tuitions.length);
+  
+  console.log('generateFutureEventsForMonth called with tuitions:', tuitions.length);
 
   tuitions.forEach((tuition) => {
     const { 
       scheduleDays = [], 
       classesPerPayday = 0, 
       classesSincePayday = 0,
-      lastPayday,
       salary = 0,
       studentName,
       teacherName,
       subjects = []
     } = tuition;
 
-    // Generate class events
+    // Generate class events for future dates only (skip today)
     scheduleDays.forEach(dayIndex => {
-      let currentDay = new Date(monthStart);
+      let currentDay = addDays(today, 1); // Start from tomorrow
       
-      // Find first occurrence of the scheduled day in the month
+      // Find first occurrence of the scheduled day after today
       while (currentDay.getDay() !== dayIndex && currentDay <= monthEnd) {
         currentDay = addDays(currentDay, 1);
       }
 
       while (currentDay <= monthEnd) {
-        try {
-          const dateKey = format(currentDay, 'yyyy-MM-dd');
-          const eventDate = safeParseDateString(dateKey);
+        if (currentDay.getDay() === dayIndex) {
+          try {
+            const dateKey = format(currentDay, 'yyyy-MM-dd');
+            const eventDate = safeParseDateString(dateKey);
 
-          if (!eventDate) {
-            currentDay = addDays(currentDay, 7);
-            continue;
+            if (!eventDate) {
+              currentDay = addDays(currentDay, 7);
+              continue;
+            }
+
+            if (!generatedEvents[dateKey]) {
+              generatedEvents[dateKey] = [];
+            }
+
+            const displayName = role === 'Teacher' ? studentName : teacherName;
+
+            generatedEvents[dateKey].push({
+              id: `${tuition.id}-class-${dateKey}`,
+              type: 'class',
+              tuitionId: tuition.id,
+              name: displayName,
+              subject: subjects[0] || 'General',
+              completed: false,
+              time: 'All Day'
+            });
+
+          } catch (error) {
+            console.error('Error generating class event for date:', currentDay, error);
           }
-
-          if (!generatedEvents[dateKey]) {
-            generatedEvents[dateKey] = [];
-          }
-
-          const displayName = role === 'Teacher' ? studentName : teacherName;
-
-          // Correct type: missed if in the past, class otherwise (including today)
-         const eventType = isToday(eventDate)
-          ? 'class'
-          : isBefore(eventDate, today)
-            ? 'missed-class'
-            : 'class';
-
-          const completed = false; // all classes incomplete initially
-
-          generatedEvents[dateKey].push({
-            id: `${tuition.id}-class-${dateKey}`,
-            type: eventType,
-            tuitionId: tuition.id,
-            name: displayName,
-            subject: subjects[0] || 'General',
-            completed,
-            time: 'All Day'
-          });
-
-          currentDay = addDays(currentDay, 7);
-        } catch (error) {
-          console.error('Error generating class event for date:', currentDay, error);
-          break;
         }
+        currentDay = addDays(currentDay, 7);
       }
     });
 
-    // Generate payday events
+    // Generate payday events for future (same logic as before)
     if (classesPerPayday > 0) {
       const remainingClasses = classesPerPayday - classesSincePayday;
       let classCount = 0;
       let currentDay = new Date(monthStart);
 
       while (currentDay <= monthEnd && classCount < remainingClasses) {
-        if (scheduleDays.includes(currentDay.getDay())) {
+        if (scheduleDays.includes(currentDay.getDay()) && !isToday(currentDay)) {
           classCount++;
           if (classCount === remainingClasses) {
             const dateKey = format(currentDay, 'yyyy-MM-dd');
@@ -226,22 +275,13 @@ const generateEventsForMonth = (date, tuitions, role) => {
 
             const displayName = role === 'Teacher' ? studentName : teacherName;
 
-            // Correct type: missed if in the past, payday otherwise (including today)
-            const eventType = isToday(eventDate)
-              ? 'payday'
-              : isBefore(eventDate, today)
-                ? 'missed-payday'
-                : 'payday';
-
-            const completed = false;
-
             generatedEvents[dateKey].push({
               id: `${tuition.id}-payday-${dateKey}`,
-              type: eventType,
+              type: 'payday',
               tuitionId: tuition.id,
               name: displayName,
               amount: salary,
-              completed,
+              completed: false,
               time: 'All Day'
             });
           }
@@ -252,6 +292,163 @@ const generateEventsForMonth = (date, tuitions, role) => {
   });
 
   return generatedEvents;
+};
+
+// const generateEventsForMonth = (date, tuitions, role) => {
+//   const monthStart = startOfMonth(date);
+//   const monthEnd = endOfMonth(date);
+//   const generatedEvents = {};
+//   const today = new Date();
+
+//   console.log('generateEventsForMonth called with tuitions:', tuitions.length);
+
+//   tuitions.forEach((tuition) => {
+//     const { 
+//       scheduleDays = [], 
+//       classesPerPayday = 0, 
+//       classesSincePayday = 0,
+//       lastPayday,
+//       salary = 0,
+//       studentName,
+//       teacherName,
+//       subjects = []
+//     } = tuition;
+
+//     // Generate class events
+//     scheduleDays.forEach(dayIndex => {
+//       let currentDay = new Date(monthStart);
+      
+//       // Find first occurrence of the scheduled day in the month
+//       while (currentDay.getDay() !== dayIndex && currentDay <= monthEnd) {
+//         currentDay = addDays(currentDay, 1);
+//       }
+
+//       while (currentDay <= monthEnd ) {
+//         try {
+//           const dateKey = format(currentDay, 'yyyy-MM-dd');
+//           const eventDate = safeParseDateString(dateKey);
+
+//           if (!eventDate) {
+//             currentDay = addDays(currentDay, 7);
+//             continue;
+//           }
+
+//           if (!generatedEvents[dateKey]) {
+//             generatedEvents[dateKey] = [];
+//           }
+
+//           const displayName = role === 'Teacher' ? studentName : teacherName;
+
+//           // Correct type: missed if in the past, class otherwise (including today)
+//          const eventType = isToday(eventDate)
+//           ? 'class'
+//           : isBefore(eventDate, today)
+//             ? 'missed-class'
+//             : 'class';
+
+//           const completed = false; // all classes incomplete initially
+
+//           generatedEvents[dateKey].push({
+//             id: `${tuition.id}-class-${dateKey}`,
+//             type: eventType,
+//             tuitionId: tuition.id,
+//             name: displayName,
+//             subject: subjects[0] || 'General',
+//             completed,
+//             time: 'All Day'
+//           });
+
+//           currentDay = addDays(currentDay, 7);
+//         } catch (error) {
+//           console.error('Error generating class event for date:', currentDay, error);
+//           break;
+//         }
+//       }
+//     });
+
+//     // Generate payday events
+//     if (classesPerPayday > 0) {
+//       const remainingClasses = classesPerPayday - classesSincePayday;
+//       let classCount = 0;
+//       let currentDay = new Date(monthStart);
+
+//       while (currentDay <= monthEnd && classCount < remainingClasses) {
+//         if (scheduleDays.includes(currentDay.getDay())) {
+//           classCount++;
+//           if (classCount === remainingClasses) {
+//             const dateKey = format(currentDay, 'yyyy-MM-dd');
+//             const eventDate = safeParseDateString(dateKey);
+            
+//             if (!eventDate) {
+//               currentDay = addDays(currentDay, 1);
+//               continue;
+//             }
+
+//             if (!generatedEvents[dateKey]) {
+//               generatedEvents[dateKey] = [];
+//             }
+
+//             const displayName = role === 'Teacher' ? studentName : teacherName;
+
+//             // Correct type: missed if in the past, payday otherwise (including today)
+//             const eventType = isToday(eventDate)
+//               ? 'payday'
+//               : isBefore(eventDate, today)
+//                 ? 'missed-payday'
+//                 : 'payday';
+
+//             const completed = false;
+
+//             generatedEvents[dateKey].push({
+//               id: `${tuition.id}-payday-${dateKey}`,
+//               type: eventType,
+//               tuitionId: tuition.id,
+//               name: displayName,
+//               amount: salary,
+//               completed,
+//               time: 'All Day'
+//             });
+//           }
+//         }
+//         currentDay = addDays(currentDay, 1);
+//       }
+//     }
+//   });
+
+//   return generatedEvents;
+// };
+
+const updatePastIncompletedClasses = async (events, userUid, monthKey) => {
+  const today = new Date();
+  let needsUpdate = false;
+  const updatedEvents = { ...events };
+
+  Object.entries(events).forEach(([dateKey, dayEvents]) => {
+    const eventDate = safeParseDateString(dateKey);
+    if (eventDate && isBefore(eventDate, today)) {
+      dayEvents.forEach((event, index) => {
+        if (event.type === 'class' && !event.completed) {
+          updatedEvents[dateKey][index] = {
+            ...event,
+            type: 'missed-class'
+          };
+          needsUpdate = true;
+        }
+      });
+    }
+  });
+
+  if (needsUpdate) {
+    try {
+      const scheduleDocRef = doc(db, 'Users', userUid, 'Schedule', monthKey);
+      await setDoc(scheduleDocRef, updatedEvents, { merge: true });
+      console.log('Updated past incomplete classes to missed-class');
+    } catch (error) {
+      console.error('Error updating past classes:', error);
+    }
+  }
+
+  return updatedEvents;
 };
 
 
@@ -300,13 +497,15 @@ const generateAndFetchEvents = async () => {
     const today = new Date();
     let combinedEvents = {};
 
-    // 1. Fetch past events from Firebase (dates before today)
+    // 1. Fetch past events from Firebase
     try {
       const scheduleDocRef = doc(db, 'Users', user.uid, 'Schedule', monthKey);
       const scheduleDoc = await getDoc(scheduleDocRef);
 
       if (scheduleDoc.exists()) {
-        const firebaseEvents = scheduleDoc.data();
+        let firebaseEvents = scheduleDoc.data();
+
+        firebaseEvents = await updatePastIncompletedClasses(firebaseEvents, user.uid, monthKey);
         Object.entries(firebaseEvents).forEach(([dateKey, dayEvents]) => {
           const eventDate = safeParseDateString(dateKey);
           if (eventDate && isBefore(eventDate, today)) {
@@ -319,22 +518,31 @@ const generateAndFetchEvents = async () => {
       console.warn('Could not fetch from Firebase, will generate all events:', firebaseError.message);
     }
 
-    // 2. Generate events for the month (today and future included)
-    const generatedEvents = generateEventsForMonth(currentDate, fetchedTuitions, userRole);
+    // 2. Handle today's events specially
+const todayEvents = await generateTodayEvents(user, monthKey, combinedEvents, fetchedTuitions, userRole);
+Object.assign(combinedEvents, todayEvents);
+
+// 3. Generate future events (excluding today)
+const futureEvents = generateFutureEventsForMonth(currentDate, fetchedTuitions, userRole);
 
     // Merge: past from Firebase, today & future from generated
-    Object.entries(generatedEvents).forEach(([dateKey, dayEvents]) => {
-      const eventDate = safeParseDateString(dateKey);
-      if (!eventDate) return;
+    // Object.entries(futureEvents).forEach(([dateKey, dayEvents]) => {
+    //   const eventDate = safeParseDateString(dateKey);
+    //   if (!eventDate) return;
 
-      if (isBefore(eventDate, today)) {
-        // Keep past events from Firebase if any, else use generated
-        if (!combinedEvents[dateKey]) combinedEvents[dateKey] = dayEvents;
-      } else {
-        // Today and future: always use generated events
-        combinedEvents[dateKey] = dayEvents;
-      }
-    });
+    //   if (isBefore(eventDate, today)) {
+    //     // Keep past events from Firebase if any, else use generated
+    //     if (!combinedEvents[dateKey]) combinedEvents[dateKey] = dayEvents;
+    //   } else {
+    //     // Today and future: always use generated events
+    //     combinedEvents[dateKey] = dayEvents;
+    //   }
+    // });
+    Object.entries(futureEvents).forEach(([dateKey, dayEvents]) => {
+  if (!combinedEvents[dateKey]) {
+    combinedEvents[dateKey] = dayEvents;
+  }
+});
 
     console.log('Combined events (past + today/future generated):', Object.keys(combinedEvents).length);
 
@@ -449,7 +657,7 @@ const generateAndFetchEvents = async () => {
     upcoming.sort((a, b) => a.eventDate.getTime() - b.eventDate.getTime());
     missed.sort((a, b) => b.eventDate.getTime() - a.eventDate.getTime());
     
-    setUpcomingEvents(upcoming);
+    setUpcomingEvents(upcoming.slice(0, 6));
     setMissedEvents(missed.slice(0, missedEventsLimit));
   };
 
@@ -512,36 +720,69 @@ const generateAndFetchEvents = async () => {
     setRefreshing(false);
   }, [currentDate]);
 
-  const loadMoreMissedEvents = () => {
-      setLoadingMore(true);
-      const newLimit = missedEventsLimit + 20;
-      setMissedEventsLimit(newLimit);
+  // const loadMoreMissedEvents = () => {
+  //     setLoadingMore(true);
+  //     const newLimit = missedEventsLimit + 20;
+  //     setMissedEventsLimit(newLimit);
       
-      setTimeout(() => {
-        const allMissedEvents = [];
-        const today = new Date();
+  //     setTimeout(() => {
+  //       const allMissedEvents = [];
+  //       const today = new Date();
 
-        Object.entries(events).forEach(([date, dayEvents]) => {
-          if (dayEvents && dayEvents.length > 0) {
-            const eventDate = parseISO(date);
+  //       Object.entries(events).forEach(([date, dayEvents]) => {
+  //         if (dayEvents && dayEvents.length > 0) {
+  //           const eventDate = parseISO(date);
             
-            dayEvents.forEach(event => {
-              if (event.type.includes('missed')) {
-                allMissedEvents.push({ ...event, date, eventDate });
-              }
-            });
-          }
-        });
+  //           dayEvents.forEach(event => {
+  //             if (event.type.includes('missed')) {
+  //               allMissedEvents.push({ ...event, date, eventDate });
+  //             }
+  //           });
+  //         }
+  //       });
 
-            allMissedEvents.sort((a, b) => {
-              if (!a.eventDate || !b.eventDate || !isValid(a.eventDate) || !isValid(b.eventDate)) return 0;
-              return b.eventDate.getTime() - a.eventDate.getTime();
-            });
-        setMissedEvents(allMissedEvents.slice(0, newLimit));
-        setLoadingMore(false);
-      }, 500);
-    };
+  //           allMissedEvents.sort((a, b) => {
+  //             if (!a.eventDate || !b.eventDate || !isValid(a.eventDate) || !isValid(b.eventDate)) return 0;
+  //             return b.eventDate.getTime() - a.eventDate.getTime();
+  //           });
+  //       setMissedEvents(allMissedEvents.slice(0, newLimit));
+  //       setLoadingMore(false);
+  //     }, 500);
+  //   };
 
+  const loadMoreMissedEvents = () => {
+  setLoadingMore(true);
+  const newLimit = missedEventsLimit + 20;
+  
+  setTimeout(() => {
+    // Re-categorize all events to get accurate missed events
+    const allMissed = [];
+    const today = new Date();
+
+    Object.entries(events).forEach(([date, dayEvents]) => {
+      if (dayEvents && dayEvents.length > 0) {
+        const eventDate = safeParseDateString(date);
+        
+        if (eventDate && isBefore(eventDate, today)) {
+          dayEvents.forEach(event => {
+            if (event.type && event.type.includes('missed') && !event.completed) {
+              allMissed.push({ ...event, date, eventDate });
+            }
+          });
+        }
+      }
+    });
+
+    allMissed.sort((a, b) => {
+      if (!a.eventDate || !b.eventDate) return 0;
+      return b.eventDate.getTime() - a.eventDate.getTime();
+    });
+    
+    setMissedEventsLimit(newLimit);
+    setMissedEvents(allMissed.slice(0, newLimit));
+    setLoadingMore(false);
+  }, 500);
+};
 
     const renderEventItem = (event, showDate = true) => (
       <View key={`${event.id}-${event.date}`} style={styles.eventItem}>
@@ -683,7 +924,7 @@ const generateAndFetchEvents = async () => {
                 )}
 
                 {/* Make Up button for past missed classes only */}
-                {isMissedClass && (
+                {/* {isMissedClass && (
                   <TouchableOpacity
                     style={styles.makeUpButton}
                     onPress={() => {
@@ -693,7 +934,7 @@ const generateAndFetchEvents = async () => {
                   >
                     <Text style={styles.makeUpButtonText}>Make Up</Text>
                   </TouchableOpacity>
-                )}
+                )} */}
               </View>
 
             </View>
